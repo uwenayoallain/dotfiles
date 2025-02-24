@@ -28,6 +28,7 @@ alias cat=bat
 alias cd=z
 
 # Git
+alias gss='git status'
 alias gc="git commit -m"
 alias gca="git commit -a -m"
 alias gp="git push origin HEAD"
@@ -40,6 +41,7 @@ alias gb='git branch'
 alias gba='git branch -a'
 alias gadd='git add'
 alias ga='git add -p'
+alias gm='git merge'
 alias gcoall='git checkout -- .'
 alias gr='git remote'
 alias gre='git reset'
@@ -153,6 +155,5 @@ fv() { nvim "$(find . -type f -not -path '*/.*' | fzf)" }
 export XDG_CONFIG_HOME="/home/rcaa/.config"
 
 eval "$(zoxide init zsh)"
-eval "$(atuin init zsh)" # Keep if you are using atuin
 eval "$(direnv hook zsh)" # Keep if you are using direnv
 eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)" # REMOVE IF NOT USING LINUXBREW: Remove this line if you are not using linuxbrew (Homebrew for Linux)
