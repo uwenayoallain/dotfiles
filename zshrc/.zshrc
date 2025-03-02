@@ -1,13 +1,18 @@
-# Reevaluate the prompt string each time it's displaying a prompt
+# Zsh Configuration File
+
+# Reevaluate the prompt string each time it's displayed.
 setopt prompt_subst
+
+# Completion Settings
 zstyle ':completion:*' matcher-list 'm:{a-z}={A-Za-z}'
 autoload bashcompinit && bashcompinit
 autoload -Uz compinit
 compinit
 source <(kubectl completion zsh)
-complete -C '/usr/local/bin/aws_completer' aws  # CHECK PATH: Verify if aws_completer is at /usr/local/bin, adjust if needed. You might need to install awscli and its zsh completion separately.
+complete -C '/usr/local/bin/aws_completer' aws # CHECK PATH: Verify aws_completer path.
 
-source /home/linuxbrew/.linuxbrew/share/zsh-autosuggestions/zsh-autosuggestions.zsh # CHECK PATH: If using linuxbrew zsh-autosuggestions, verify this path. Otherwise, adjust path if installed differently or remove if not using.
+# Autosuggestions
+source /home/linuxbrew/.linuxbrew/share/zsh-autosuggestions/zsh-autosuggestions.zsh # CHECK PATH: Verify path.
 bindkey '^w' autosuggest-execute
 bindkey '^e' autosuggest-accept
 bindkey '^u' autosuggest-toggle
@@ -15,25 +20,27 @@ bindkey '^L' vi-forward-word
 bindkey '^k' up-line-or-search
 bindkey '^j' down-line-or-search
 
+# Starship Prompt
 eval "$(starship init zsh)"
-export STARSHIP_CONFIG=~/.config/starship/starship.toml # CHECK PATH:  Ensure you have starship.toml at ~/.config/starship/ for custom prompt.
+export STARSHIP_CONFIG=~/.config/starship/starship.toml # CHECK PATH: Verify starship.toml path.
 
-# You may need to manually set your language environment
+# Language Environment
 export LANG=en_US.UTF-8
 
-export EDITOR=/usr/bin/nvim # CHECK PATH: Adjust to your preferred editor's path, e.g., /usr/bin/vim, /usr/bin/nano, /usr/local/bin/code
+# Editor
+export EDITOR=/usr/bin/nvim # CHECK PATH: Verify nvim path.
 
-alias la=tree
-alias cat=bat
-alias cd=z
+# Aliases
+alias la='tree'
+alias cat='bat'
+alias cd='z'
 
-# Git
+# Git Aliases
 alias gss='git status'
 alias gc="git commit -m"
 alias gca="git commit -a -m"
 alias gp="git push origin HEAD"
 alias gpu="git pull origin"
-alias gst="git status"
 alias glog="git log --graph --topo-order --pretty='%w(100,0,6)%C(yellow)%h%C(bold)%C(black)%d %C(cyan)%ar %C(green)%an%n%C(bold)%C(white)%s %N' --abbrev-commit"
 alias gdiff="git diff"
 alias gco="git checkout"
@@ -46,36 +53,36 @@ alias gcoall='git checkout -- .'
 alias gr='git remote'
 alias gre='git reset'
 
-# Docker
+# Docker Aliases
 alias dco="docker compose"
 alias dps="docker ps"
 alias dpa="docker ps -a"
 alias dl="docker ps -l -q"
 alias dx="docker exec -it"
 
-# Dirs
+# Directory Navigation Aliases
 alias ..="cd .."
 alias ...="cd ../.."
 alias ....="cd ../../.."
 alias .....="cd ../../../.."
 alias ......="cd ../../../../.."
 
-# GO
-export GOPATH='/home/rcaa/go' # ADJUST PATH: Change to your Go workspace path if needed.
+# GO Environment
+export GOPATH='/home/rcaa/go' # ADJUST PATH: Verify Go workspace path.
 
-# VIM
-alias v="/usr/bin/nvim" # ADJUST PATH: Adjust if your nvim is in a different location
+# VIM Alias
+alias v="/usr/bin/nvim" # ADJUST PATH: Verify nvim path.
 
-# Nmap
+# Nmap Alias
 alias nm="nmap -sC -sV -oN nmap"
 
-# PATH - Review and adjust carefully!
+# PATH
 export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/home/rcaa/.vimpkg/bin:${GOPATH}/bin:/home/rcaa/.cargo/bin:/home/linuxbrew/.linuxbrew/bin
 
 alias cl='clear'
 
-# K8S
-export KUBECONFIG=~/.kube/config # CHECK PATH:  Verify path to your kubeconfig file.
+# Kubernetes (K8S) Settings
+export KUBECONFIG=~/.kube/config # CHECK PATH: Verify kubeconfig path.
 alias k="kubectl"
 alias ka="kubectl apply -f"
 alias kg="kubectl get"
@@ -86,74 +93,195 @@ alias kgpo="kubectl get pod"
 alias kgd="kubectl get deployments"
 alias kc="kubectx"
 alias kns="kubens"
-alias kl="kubectl logs -f"
 alias ke="kubectl exec -it"
 alias kcns='kubectl config set-context --current --namespace'
-alias podname=''
 
-# HTTP requests with xh!
+# HTTP Requests with xh
 alias http="xh"
 
-# VI Mode!!!
+# Vi Mode
 bindkey jj vi-cmd-mode
 
-# Eza
+# Eza Aliases
 alias l="eza -l --icons --git -a"
 alias ls="eza --icons --git"
 alias lt="eza --tree --level=2 --long --icons --git"
-alias ltree="eza --tree --level=2  --icons --git"
+alias ltree="eza --tree --level=2 --icons --git"
 
-# SEC STUFF - ADJUST PATHS BELOW TO YOUR SECURITY TOOL LOCATIONS AND WORDLISTS!
-alias gobust='gobuster dir --wordlist ~/security/wordlists/diccnoext.txt --wildcard --url' # ADJUST WORDLIST PATH: Update to your wordlist path.
-alias dirsearch='python dirsearch.py -w db/dicc.txt -b -u' # ADJUST PATHS: Update wordlist path, python path if needed, dirsearch path if not in PATH.
-alias massdns='~/hacking/tools/massdns/bin/massdns -r ~/hacking/tools/massdns/lists/resolvers.txt -t A -o S bf-targets.txt -w livehosts.txt -s 4000' # ADJUST PATHS: Update paths for massdns, resolvers, etc.
-alias server='python -m http.server 4445' # ADJUST PATH: Python path if needed.
-alias tunnel='ngrok http 4445' # ENSURE PATH: Ensure ngrok is in PATH or adjust path here if needed.
-alias fuzz='ffuf -w ~/hacking/SecLists/content_discovery_all.txt -mc all -u' # ADJUST WORDLIST PATH: Update wordlist path.
-alias gr='~/go/src/github.com/tomnomnom/gf/gf' # ADJUST PATH: Update gf path if needed.
+# Security Tools
+export SECURITY_TOOLS_DIR="$HOME/security" # ADJUST PATH: Verify security tools path.
+alias gobust="gobuster dir --wordlist $SECURITY_TOOLS_DIR/wordlists/diccnoext.txt --wildcard --url"
+alias dirsearch="python dirsearch.py -w $SECURITY_TOOLS_DIR/db/dicc.txt -b -u"
+alias massdns="~/hacking/tools/massdns/bin/massdns -r ~/hacking/tools/massdns/lists/resolvers.txt -t A -o S bf-targets.txt -w livehosts.txt -s 4000"
+alias server="python -m http.server 4445"
+alias tunnel="ngrok http 4445" # ENSURE PATH: Ensure ngrok is in PATH.
+alias fuzz="ffuf -w $SECURITY_TOOLS_DIR/SecLists/content_discovery_all.txt -mc all -u"
+alias gf="~/go/src/github.com/tomnomnom/gf/gf" # Renamed from 'gr' to avoid conflict with git alias.
 
-### FZF ###
+# FZF Configuration
 export FZF_DEFAULT_COMMAND='fd --type f --hidden --follow'
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 
-# alias mat='osascript -e "tell application \"System Events\" to key code 126 using {command down}" && tmux neww "cmatrix"'  # REMOVED: macOS specific, no direct Linux replacement in this config.
+# Functions
 
-# Nix! - LINES BELOW ARE REMOVED BY DEFAULT AS PER ASSUMPTION OF NO NIX USAGE.
-#       - UNCOMMENT AND KEEP IF YOU ARE USING NIX PACKAGE MANAGER.
-# export NIX_CONF_DIR=$HOME/.config/nix
-# export PATH=/run/current-system/sw/bin:$PATH
-# if [ -e '/nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh' ]; then
-#     . '/nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh'
-# fi
-# # End Nix
-
-
+# Ranger: File manager integration that changes directory on exit.
 function ranger {
-    local IFS=$'\t\n'
-    local tempfile="$(mktemp -t tmp.XXXXXX)"
-    local ranger_cmd=(
-        command
-        ranger
-        --cmd="map Q chain shell echo %d > "$tempfile"; quitall"
-    )
+	local IFS=$'\t\n'
+	local tempfile
+	tempfile="$(mktemp -t tmp.XXXXXX)"
+	local ranger_cmd=(
+		command
+		ranger
+		--cmd="map Q chain shell echo %d > \"$tempfile\"; quitall"
+	)
 
-    ${ranger_cmd[@]} "$@"
-    if [[ -f "$tempfile" ]] && [[ "$(cat -- "$tempfile")" != "$(echo -n `pwd`)" ]]; then
-        cd -- "$(cat "$tempfile")" || return
-    fi
-    command rm -f -- "$tempfile" 2>/dev/null
+	"${ranger_cmd[@]}" "$@"
+	if [[ -f "$tempfile" ]] && [[ "$(cat -- "$tempfile")" != "$(echo -n "$(pwd)")" ]]; then
+		cd -- "$(cat "$tempfile")" || return
+	fi
+	command rm -f -- "$tempfile" 2>/dev/null
 }
 alias rr='ranger'
 
-# navigation
+# Navigation Functions
 cx() { cd "$@" && l; }
 fcd() { cd "$(find . -type d -not -path '*/.*' | fzf)" && l; }
-f() { echo "$(find . -type f -not -path '*/.*' | fzf)" | xclip -in -selection clipboard } # Using xclip for clipboard, install xclip if needed (sudo apt install xclip or equivalent) - OR - use 'xsel -ib' instead of 'xclip -in -selection clipboard' if you prefer xsel (install xsel if needed).  To just print to terminal without clipboard, remove '| xclip ...' part.
-fv() { nvim "$(find . -type f -not -path '*/.*' | fzf)" }
+f() { echo "$(find . -type f -not -path '*/.*' | fzf)" | xclip -in -selection clipboard; }
+fv() { nvim "$(find . -type f -not -path '*/.*' | fzf)"; }
 
+# GitHub Copilot Suggest (ghcs)
+ghcs() {
+	FUNCNAME="$funcstack[1]"
+	TARGET="shell"
+	local GH_DEBUG="$GH_DEBUG"
+	local GH_HOST="$GH_HOST"
+
+	read -r -d '' __USAGE <<-'EOF'
+		    Wrapper around `gh copilot suggest` to propose a command based on a natural language description.
+		    Supports executing the suggested command if applicable.
+
+		    USAGE:
+		        $FUNCNAME [flags] <prompt>
+
+		    FLAGS:
+		        -d, --debug        Enable debugging.
+		        -h, --help         Display this help message.
+		            --hostname     The GitHub host to use for authentication.
+		        -t, --target       Target for suggestion; must be shell, gh, or git (default: "shell").
+
+		    EXAMPLES:
+		        # Guided experience:
+		        $ $FUNCNAME
+
+		        # Git use cases:
+		        $ $FUNCNAME -t git "Undo the most recent local commits"
+		        $ $FUNCNAME -t git "Clean up local branches"
+		        $ $FUNCNAME -t git "Setup LFS for images"
+
+		        # GitHub CLI use cases:
+		        $ $FUNCNAME -t gh "Create pull request"
+		        $ $FUNCNAME -t gh "Summarize work I have done in issues and pull requests for promotion"
+
+		        # General use cases:
+		        $ $FUNCNAME "Kill processes holding onto deleted files"
+		        $ $FUNCNAME "Test for SSL/TLS issues with github.com"
+		        $ $FUNCNAME "Convert SVG to PNG and resize"
+		        $ $FUNCNAME "Convert MOV to animated PNG"
+	EOF
+
+	local OPT OPTARG OPTIND
+	while getopts "dht:-:" OPT; do
+		if [ "$OPT" = "-" ]; then
+			OPT="${OPTARG%%=*}"
+			OPTARG="${OPTARG#"$OPT"}"
+			OPTARG="${OPTARG#=}"
+		fi
+
+		case "$OPT" in
+		debug | d)
+			GH_DEBUG=api
+			;;
+		help | h)
+			echo "$__USAGE"
+			return 0
+			;;
+		hostname)
+			GH_HOST="$OPTARG"
+			;;
+		target | t)
+			TARGET="$OPTARG"
+			;;
+		esac
+	done
+
+	shift "$((OPTIND - 1))"
+
+	TMPFILE="$(mktemp -t gh-copilotXXXXXX)"
+	trap 'rm -f "$TMPFILE"' EXIT
+	if GH_DEBUG="$GH_DEBUG" GH_HOST="$GH_HOST" gh copilot suggest -t "$TARGET" "$@" --shell-out "$TMPFILE"; then
+		if [ -s "$TMPFILE" ]; then
+			FIXED_CMD="$(cat "$TMPFILE")"
+			print -s -- "$FIXED_CMD"
+			echo
+			eval -- "$FIXED_CMD"
+		fi
+	else
+		return 1
+	fi
+}
+
+# GitHub Copilot Explain (ghce)
+ghce() {
+	FUNCNAME="$funcstack[1]"
+	local GH_DEBUG="$GH_DEBUG"
+	local GH_HOST="$GH_HOST"
+
+	read -r -d '' __USAGE <<-'EOF'
+		    Wrapper around `gh copilot explain` to provide a natural language explanation of a given command.
+
+		    USAGE:
+		        $FUNCNAME [flags] <command>
+
+		    FLAGS:
+		        -d, --debug     Enable debugging.
+		        -h, --help      Display this help message.
+		            --hostname  The GitHub host to use for authentication.
+
+		    EXAMPLES:
+		        $ $FUNCNAME 'du -sh | sort -h'
+		        $ $FUNCNAME 'git log --oneline --graph --decorate --all'
+		        $ $FUNCNAME 'bfg --strip-blobs-bigger-than 50M'
+	EOF
+
+	local OPT OPTARG OPTIND
+	while getopts "dh-:" OPT; do
+		if [ "$OPT" = "-" ]; then
+			OPT="${OPTARG%%=*}"
+			OPTARG="${OPTARG#"$OPT"}"
+			OPTARG="${OPTARG#=}"
+		fi
+
+		case "$OPT" in
+		debug | d)
+			GH_DEBUG=api
+			;;
+		help | h)
+			echo "$__USAGE"
+			return 0
+			;;
+		hostname)
+			GH_HOST="$OPTARG"
+			;;
+		esac
+	done
+
+	shift "$((OPTIND - 1))"
+
+	GH_DEBUG="$GH_DEBUG" GH_HOST="$GH_HOST" gh copilot explain "$@"
+}
 
 export XDG_CONFIG_HOME="/home/rcaa/.config"
 
+# Zoxide and Direnv
 eval "$(zoxide init zsh)"
 eval "$(direnv hook zsh)" # Keep if you are using direnv
-eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)" # REMOVE IF NOT USING LINUXBREW: Remove this line if you are not using linuxbrew (Homebrew for Linux)
