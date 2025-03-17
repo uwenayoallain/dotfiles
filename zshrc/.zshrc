@@ -13,6 +13,7 @@ complete -C '/usr/local/bin/aws_completer' aws # CHECK PATH: Verify aws_complete
 
 # Autosuggestions
 source /home/linuxbrew/.linuxbrew/share/zsh-autosuggestions/zsh-autosuggestions.zsh # CHECK PATH: Verify path.
+source /home/rcaa/.config/zshrc/mongodb.zsh
 bindkey '^w' autosuggest-execute
 bindkey '^e' autosuggest-accept
 bindkey '^u' autosuggest-toggle
@@ -34,6 +35,7 @@ export EDITOR=/usr/bin/nvim # CHECK PATH: Verify nvim path.
 alias la='tree'
 alias cat='bat'
 alias cd='z'
+alias py='python3'
 
 # Git Aliases
 alias gss='git status'
