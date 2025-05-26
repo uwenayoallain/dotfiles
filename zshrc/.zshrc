@@ -1,18 +1,13 @@
 # Zsh Configuration File
 
-# Reevaluate the prompt string each time it's displayed.
-setopt prompt_subst
-
-# Completion Settings
-zstyle ':completion:*' matcher-list 'm:{a-z}={A-Za-z}'
-autoload bashcompinit && bashcompinit
-autoload -Uz compinit
-compinit
-source <(kubectl completion zsh)
-complete -C '/usr/local/bin/aws_completer' aws # CHECK PATH: Verify aws_completer path.
-
 # Autosuggestions
-source /home/linuxbrew/.linuxbrew/share/zsh-autosuggestions/zsh-autosuggestions.zsh # CHECK PATH: Verify path.
+export ZSH="$HOME/.oh-my-zsh"
+plugins=(
+	git
+	zsh-autosuggestions
+)
+source $ZSH/oh-my-zsh.sh
+source ~/.config/zsh-syntax-highlighting/themes/catppuccin_latte-zsh-syntax-highlighting.zsh
 source /home/rcaa/.config/zshrc/mongodb.zsh
 bindkey '^w' autosuggest-execute
 bindkey '^e' autosuggest-accept
@@ -21,9 +16,6 @@ bindkey '^L' vi-forward-word
 bindkey '^k' up-line-or-search
 bindkey '^j' down-line-or-search
 
-# Starship Prompt
-eval "$(starship init zsh)"
-export STARSHIP_CONFIG=~/.config/starship/starship.toml # CHECK PATH: Verify starship.toml path.
 
 # Language Environment
 export LANG=en_US.UTF-8
@@ -287,3 +279,4 @@ export XDG_CONFIG_HOME="/home/rcaa/.config"
 # Zoxide and Direnv
 eval "$(zoxide init zsh)"
 eval "$(direnv hook zsh)" # Keep if you are using direnv
+eval "$(starship init zsh)"
