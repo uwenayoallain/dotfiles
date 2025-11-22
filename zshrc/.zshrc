@@ -278,5 +278,5 @@ export XDG_CONFIG_HOME="/home/rcaa/.config"
 
 # Zoxide and Direnv
 eval "$(zoxide init zsh)"
-eval "$(direnv hook zsh)" # Keep if you are using direnv
+eval "$(direnv hook zsh)" 
 eval "$(starship init zsh)"
