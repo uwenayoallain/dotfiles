@@ -221,6 +221,30 @@ install_gnome_terminal_theme() {
 }
 
 # ============================================
+# Git Configuration
+# ============================================
+configure_git() {
+    if ! command_exists git; then
+        print_info "Installing git..."
+        sudo apt install -y git
+    fi
+    
+    print_info "Configuring git global settings..."
+    
+    git config --global user.name "UWENAYO Alain Pacifique"
+    git config --global user.email "uwenayoallain@gmail.com"
+    
+    # Set some sensible defaults
+    git config --global init.defaultBranch main
+    git config --global core.editor "nvim"
+    git config --global pull.rebase false
+    
+    print_success "Git configured:"
+    echo "  Name:  $(git config --global user.name)"
+    echo "  Email: $(git config --global user.email)"
+}
+
+# ============================================
 # Stow Dotfiles
 # ============================================
 backup_existing_files() {
@@ -314,6 +338,7 @@ main() {
     setup_fzf
     install_nerd_font
     install_gnome_terminal_theme
+    configure_git
     
     if [ "$skip_stow" = false ]; then
         stow_dotfiles
