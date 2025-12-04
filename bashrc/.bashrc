@@ -1,4 +1,4 @@
-# Bash Configuration File
+# Bash Configuration File with Oh My Bash
 
 # If not running interactively, don't do anything
 case $- in
@@ -6,34 +6,109 @@ case $- in
       *) return;;
 esac
 
-# History settings
-HISTCONTROL=ignoreboth
-HISTSIZE=10000
-HISTFILESIZE=20000
+# ============================================
+# Oh My Bash Configuration
+# ============================================
+export OSH="$HOME/.oh-my-bash"
+
+# Theme - empty because we use starship prompt
+OSH_THEME=""
+
+# Case-insensitive completion
+OMB_CASE_SENSITIVE="false"
+
+# Hyphen-insensitive completion (- and _ are interchangeable)
+OMB_HYPHEN_SENSITIVE="false"
+
+# Enable command auto-correction
+ENABLE_CORRECTION="true"
+
+# Display red dots whilst waiting for completion
+COMPLETION_WAITING_DOTS="true"
+
+# History timestamp format
+HIST_STAMPS='yyyy-mm-dd'
+
+# Enable sudo plugin
+OMB_USE_SUDO=true
+
+# Completions to load
+completions=(
+    git
+    ssh
+    docker
+    docker-compose
+    makefile
+    npm
+    pip
+    pip3
+    tmux
+    system
+)
+
+# Aliases to load
+aliases=(
+    general
+)
+
+# Plugins to load
+plugins=(
+    git
+    bashmarks
+    sudo
+    npm
+)
+
+# Load Oh My Bash
+if [ -f "$OSH/oh-my-bash.sh" ]; then
+    source "$OSH/oh-my-bash.sh"
+fi
+
+# ============================================
+# History Configuration (Enhanced)
+# ============================================
+HISTCONTROL=ignoreboth:erasedups
+HISTSIZE=50000
+HISTFILESIZE=100000
+HISTTIMEFORMAT="%F %T "
 shopt -s histappend
+
+# Save and reload history after each command (shared across terminals)
+PROMPT_COMMAND="history -a; history -c; history -r; $PROMPT_COMMAND"
 
 # Check window size after each command
 shopt -s checkwinsize
 
+# ============================================
+# Bash Completion (Additional)
+# ============================================
+# Enable programmable completion features
+if ! shopt -oq posix; then
+    if [ -f /usr/share/bash-completion/bash_completion ]; then
+        . /usr/share/bash-completion/bash_completion
+    elif [ -f /etc/bash_completion ]; then
+        . /etc/bash_completion
+    fi
+fi
+
+# Homebrew completions
+if [ -d /home/linuxbrew/.linuxbrew/etc/bash_completion.d ]; then
+    for f in /home/linuxbrew/.linuxbrew/etc/bash_completion.d/*; do
+        [ -f "$f" ] && . "$f"
+    done
+fi
+
 # Make less more friendly for non-text input files
 [ -x /usr/bin/lesspipe ] && eval "$(SHELL=/bin/sh lesspipe)"
 
-# Language Environment
+# ============================================
+# Environment Variables
+# ============================================
 export LANG=en_US.UTF-8
-
-# Editor
-export EDITOR=/usr/bin/nvim
-
-# GO Environment
+export EDITOR=nvim
 export GOPATH="$HOME/go"
-
-# XDG Config
 export XDG_CONFIG_HOME="$HOME/.config"
-
-# Security Tools
 export SECURITY_TOOLS_DIR="$HOME/security"
-
-# FZF Configuration
 export FZF_DEFAULT_COMMAND='fd --type f --hidden --follow'
 
 # PATH
@@ -132,6 +207,9 @@ cx() { cd "$@" && l; }
 fcd() { cd "$(find . -type d -not -path '*/.*' | fzf)" && l; }
 f() { echo "$(find . -type f -not -path '*/.*' | fzf)" | xclip -in -selection clipboard; }
 fv() { nvim "$(find . -type f -not -path '*/.*' | fzf)"; }
+
+# History search function
+hg() { history | grep "$1"; }
 
 # GitHub Copilot Suggest (ghcs)
 ghcs() {
@@ -285,7 +363,7 @@ if command -v direnv &> /dev/null; then
     eval "$(direnv hook bash)"
 fi
 
-# Initialize starship prompt
+# Initialize starship prompt (should be at the end)
 if command -v starship &> /dev/null; then
     eval "$(starship init bash)"
 fi

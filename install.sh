@@ -50,7 +50,9 @@ install_prerequisites() {
         nmap \
         tmux \
         file \
-        procps
+        procps \
+        bash-completion \
+        unzip
     print_success "Prerequisites installed"
 }
 
@@ -135,6 +137,19 @@ install_tpm() {
         git clone https://github.com/tmux-plugins/tpm "$tpm_dir"
         print_success "TPM installed"
         print_warning "Remember to press prefix + I inside tmux to install plugins"
+    fi
+}
+
+# ============================================
+# Oh My Bash Installation
+# ============================================
+install_oh_my_bash() {
+    if [ -d "$HOME/.oh-my-bash" ]; then
+        print_info "Oh My Bash is already installed"
+    else
+        print_info "Installing Oh My Bash..."
+        bash -c "$(curl -fsSL https://raw.githubusercontent.com/ohmybash/oh-my-bash/master/tools/install.sh)" --unattended
+        print_success "Oh My Bash installed"
     fi
 }
 
@@ -335,6 +350,7 @@ main() {
     install_brew_packages
     install_ngrok
     install_tpm
+    install_oh_my_bash
     setup_fzf
     install_nerd_font
     install_gnome_terminal_theme
