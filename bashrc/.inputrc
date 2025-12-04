@@ -1,0 +1,37 @@
+# Readline configuration for Bash
+
+# Enable vi editing mode
+set editing-mode vi
+
+# Show vi mode in prompt (insert vs command mode)
+set show-mode-in-prompt on
+set vi-ins-mode-string \1\e[6 q\2
+set vi-cmd-mode-string \1\e[2 q\2
+
+# History search with Ctrl+k (up) and Ctrl+j (down)
+"\C-k": history-search-backward
+"\C-j": history-search-forward
+
+# Ctrl+l to clear screen (like default)
+"\C-l": clear-screen
+
+# Case-insensitive completion
+set completion-ignore-case on
+
+# Show all completions on first tab if ambiguous
+set show-all-if-ambiguous on
+
+# Color files by types
+set colored-stats on
+
+# Append char to indicate file type
+set visible-stats on
+
+# Mark symlinked directories
+set mark-symlinked-directories on
+
+# Color the common prefix in completion
+set colored-completion-prefix on
+
+# Show all completions if more than one
+set menu-complete-display-prefix on
