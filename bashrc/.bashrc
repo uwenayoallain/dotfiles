@@ -211,6 +211,64 @@ fv() { nvim "$(find . -type f -not -path '*/.*' | fzf)"; }
 # History search function
 hg() { history | grep "$1"; }
 
+# System update function - updates all package managers and tools
+update() {
+    local GREEN='\033[0;32m'
+    local BLUE='\033[0;34m'
+    local RED='\033[0;31m'
+    local NC='\033[0m' # No Color
+
+    echo -e "${BLUE}========================================${NC}"
+    echo -e "${BLUE}   Updating All Systems${NC}"
+    echo -e "${BLUE}========================================${NC}"
+    echo ""
+
+    # Update APT
+    if command -v apt &> /dev/null; then
+        echo -e "${BLUE}[1/5] Updating APT repositories...${NC}"
+        sudo apt update && sudo apt upgrade -y
+        echo -e "${GREEN}APT update complete${NC}"
+        echo ""
+    fi
+
+    # Update Homebrew
+    if command -v brew &> /dev/null; then
+        echo -e "${BLUE}[2/5] Updating Homebrew...${NC}"
+        brew update && brew upgrade
+        echo -e "${GREEN}Homebrew update complete${NC}"
+        echo ""
+    fi
+
+    # Update Oh My Bash
+    if [ -d "$HOME/.oh-my-bash" ]; then
+        echo -e "${BLUE}[3/5] Updating Oh My Bash...${NC}"
+        cd "$HOME/.oh-my-bash" && git pull origin master
+        cd - > /dev/null
+        echo -e "${GREEN}Oh My Bash update complete${NC}"
+        echo ""
+    fi
+
+    # Update TPM plugins
+    if [ -d "$HOME/.tmux/plugins/tpm" ]; then
+        echo -e "${BLUE}[4/5] Updating Tmux plugins...${NC}"
+        "$HOME/.tmux/plugins/tpm/bin/update_plugins" all
+        echo -e "${GREEN}Tmux plugins update complete${NC}"
+        echo ""
+    fi
+
+    # Update Neovim plugins
+    if command -v nvim &> /dev/null; then
+        echo -e "${BLUE}[5/5] Updating Neovim plugins...${NC}"
+        nvim --headless "+Lazy! sync" +qa
+        echo -e "${GREEN}Neovim plugins update complete${NC}"
+        echo ""
+    fi
+
+    echo -e "${GREEN}========================================${NC}"
+    echo -e "${GREEN}   All updates complete!${NC}"
+    echo -e "${GREEN}========================================${NC}"
+}
+
 # GitHub Copilot Suggest (ghcs)
 ghcs() {
     local FUNCNAME="${FUNCNAME[0]}"
@@ -367,3 +425,21 @@ fi
 if command -v starship &> /dev/null; then
     eval "$(starship init bash)"
 fi
+alias d='docker compose -f $HOME/projects/work/work-project/docker-compose.common.yml'
+
+export NVM_DIR="$HOME/.config/nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
+alias dr='d down && d build && d up -d'
+
+# pnpm
+export PNPM_HOME="$HOME/.local/share/pnpm"
+case ":$PATH:" in
+  *":$PNPM_HOME:"*) ;;
+  *) export PATH="$PNPM_HOME:$PATH" ;;
+esac
+# pnpm end
+
+# bun
+export BUN_INSTALL="$HOME/.bun"
+export PATH="$BUN_INSTALL/bin:$PATH"

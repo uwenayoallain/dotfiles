@@ -53,6 +53,13 @@ install_prerequisites() {
         procps \
         bash-completion \
         unzip
+    
+    # Fix for bat on Ubuntu (installed as batcat)
+    if command_exists batcat && ! command_exists bat; then
+        print_info "Fixing bat command (batcat -> bat)..."
+        sudo ln -s /usr/bin/batcat /usr/local/bin/bat
+    fi
+
     print_success "Prerequisites installed"
 }
 
