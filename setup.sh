@@ -60,4 +60,50 @@ if command -v code &> /dev/null && [ -f "$extensions_file" ]; then
     done < "$extensions_file"
 fi
 
+if command -v python3 &> /dev/null; then
+    settings_file="$HOME/.config/Code/User/settings.json"
+    rg_path="/home/linuxbrew/.linuxbrew/bin/rg"
+    if [ ! -x "$rg_path" ] && command -v rg &> /dev/null; then
+        rg_path="$(command -v rg)"
+    fi
+
+    mkdir -p "$(dirname "$settings_file")"
+    python3 - "$settings_file" "$rg_path" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+settings_path = Path(sys.argv[1])
+rg_path = sys.argv[2]
+key = "todo-tree.ripgrep"
+
+if settings_path.exists() and settings_path.read_text().strip():
+    text = settings_path.read_text()
+else:
+    settings_path.write_text('{\n  "todo-tree.ripgrep": "' + rg_path + '"\n}\n')
+    sys.exit(0)
+
+replacement = f'"{key}": "{rg_path}"'
+if f'"{key}"' in text:
+    text = re.sub(r'"todo-tree\.ripgrep"\s*:\s*"[^"]*"', replacement, text)
+else:
+    closing_index = text.rfind("}")
+    if closing_index == -1:
+        text = '{\n  "todo-tree.ripgrep": "' + rg_path + '"\n}\n'
+    else:
+        prefix = text[:closing_index].rstrip()
+        suffix = text[closing_index:]
+        if prefix.endswith("{"):
+            insertion = "\n  " + replacement + "\n"
+        elif prefix.endswith(","):
+            insertion = "\n  " + replacement + ",\n"
+        else:
+            insertion = ",\n  " + replacement + "\n"
+        text = prefix + insertion + suffix
+
+settings_path.write_text(text)
+PY
+    echo "Configured VS Code Todo Tree ripgrep path: $rg_path"
+fi
+
 echo "Done! Restart your terminal or run: source ~/.bashrc"
