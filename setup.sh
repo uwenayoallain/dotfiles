@@ -41,4 +41,23 @@ echo "Stowing configs to ~/.config..."
 mkdir -p "$HOME/.config"
 stow -t "$HOME/.config" nvim starship tmux wezterm
 
+echo "Stowing application launcher overrides to ~/.local/share..."
+mkdir -p "$HOME/.local/share"
+stow -t "$HOME/.local/share" applications
+
+# Install uv if brew is available but uv is missing
+if command -v brew &> /dev/null && ! command -v uv &> /dev/null; then
+    echo "Installing uv via Homebrew..."
+    brew install uv
+fi
+
+extensions_file="$DOTFILES_DIR/vscode/extensions.txt"
+if command -v code &> /dev/null && [ -f "$extensions_file" ]; then
+    echo "Installing VS Code extensions..."
+    while IFS= read -r extension || [ -n "$extension" ]; do
+        [[ -z "$extension" || "$extension" =~ ^# ]] && continue
+        code --install-extension "$extension" --force
+    done < "$extensions_file"
+fi
+
 echo "Done! Restart your terminal or run: source ~/.bashrc"

@@ -52,7 +52,19 @@ install_prerequisites() {
         file \
         procps \
         bash-completion \
-        unzip
+        unzip \
+        ca-certificates \
+        gpg \
+        apt-transport-https \
+        software-properties-common \
+        python3-pip \
+        python3-venv \
+        jq \
+        cmake \
+        shellcheck \
+        shfmt \
+        openjdk-21-jre-headless \
+        maven
     
     # Fix for bat on Ubuntu (installed as batcat)
     if command_exists batcat && ! command_exists bat; then
@@ -102,6 +114,10 @@ install_brew_packages() {
         neovim     # Text editor
         gobuster   # Directory/file brute-forcer
         ffuf       # Fast web fuzzer
+        uv         # Extremely fast Python package installer and resolver
+        ripgrep    # Fast recursive search (rg)
+        flyctl     # Fly.io CLI
+        jupyterlab # Notebook/lab environment
     )
     
     for package in "${packages[@]}"; do
@@ -114,6 +130,191 @@ install_brew_packages() {
     done
     
     print_success "Homebrew packages installed"
+}
+
+# ============================================
+# GitHub CLI
+# ============================================
+install_gh() {
+    if command_exists gh; then
+        print_info "GitHub CLI is already installed"
+    else
+        print_info "Installing GitHub CLI..."
+        sudo apt install -y gh
+        print_success "GitHub CLI installed"
+    fi
+}
+
+# ============================================
+# Docker (via official apt repo)
+# ============================================
+install_docker() {
+    if command_exists docker; then
+        print_info "Docker is already installed"
+    else
+        print_info "Installing Docker via official repository..."
+
+        sudo apt install -y ca-certificates curl
+        sudo install -m 0755 -d /etc/apt/keyrings
+        sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+        sudo chmod a+r /etc/apt/keyrings/docker.asc
+
+        echo \
+          "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \
+          $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}") stable" | \
+          sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+        sudo apt update
+        sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+        sudo usermod -aG docker "$USER"
+
+        print_success "Docker installed"
+        print_warning "Log out and back in for docker group membership to take effect"
+    fi
+}
+
+# ============================================
+# NVM (Node Version Manager) + Node.js
+# ============================================
+install_nvm() {
+    export NVM_DIR="$HOME/.config/nvm"
+
+    if [ -s "$NVM_DIR/nvm.sh" ]; then
+        print_info "NVM is already installed"
+    else
+        print_info "Installing NVM (Node Version Manager)..."
+        mkdir -p "$NVM_DIR"
+        curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+        print_success "NVM installed"
+    fi
+
+    # Load NVM for this session
+    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+
+    if ! nvm ls --lts --no-colors | grep -q 'v[0-9]'; then
+        print_info "Installing Node.js LTS via NVM..."
+        nvm install --lts
+    else
+        print_info "Node.js LTS is already installed in NVM"
+    fi
+
+    nvm alias default 'lts/*'
+    nvm use default
+    print_success "Node.js active version: $(node --version)"
+}
+
+# ============================================
+# Node Ecosystem (pnpm + bun)
+# ============================================
+install_node_ecosystem() {
+    # Ensure NVM and Node are loaded
+    export NVM_DIR="$HOME/.config/nvm"
+    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+
+    # Enable pnpm via corepack
+    if command_exists corepack; then
+        print_info "Enabling pnpm via corepack..."
+        corepack enable pnpm
+        print_success "pnpm enabled: $(pnpm --version 2>/dev/null || echo 'ready')"
+    else
+        print_warning "corepack not found, skipping pnpm setup"
+    fi
+
+    # Install bun
+    if command_exists bun; then
+        print_info "bun is already installed"
+    else
+        print_info "Installing bun..."
+        curl -fsSL https://bun.sh/install | bash
+        print_success "bun installed"
+    fi
+
+    local npm_packages=(
+        @anthropic-ai/claude-code
+        @google/gemini-cli
+        @openai/codex
+        opencode-ai
+        yarn
+    )
+
+    for package in "${npm_packages[@]}"; do
+        print_info "Installing/updating npm global package: $package"
+        npm install -g "$package"
+    done
+
+    export PNPM_HOME="$HOME/.local/share/pnpm"
+    mkdir -p "$PNPM_HOME"
+    export PATH="$PNPM_HOME:$PNPM_HOME/bin:$PATH"
+
+    if command_exists pnpm; then
+        print_info "Installing/updating pnpm global package: kirimase"
+        pnpm add -g kirimase
+    fi
+}
+
+# ============================================
+# DuckDB
+# ============================================
+install_duckdb() {
+    if command_exists duckdb; then
+        print_info "DuckDB is already installed"
+    else
+        print_info "Installing DuckDB..."
+        mkdir -p "$HOME/.local/bin"
+        local tmp_dir
+        tmp_dir=$(mktemp -d)
+        curl -fsSL -o "$tmp_dir/duckdb.zip" \
+            "https://github.com/duckdb/duckdb/releases/latest/download/duckdb_cli-linux-amd64.zip"
+        unzip -q "$tmp_dir/duckdb.zip" -d "$HOME/.local/bin"
+        chmod +x "$HOME/.local/bin/duckdb"
+        rm -rf "$tmp_dir"
+        print_success "DuckDB installed to ~/.local/bin/duckdb"
+    fi
+}
+
+# ============================================
+# Visual Studio Code
+# ============================================
+install_vscode() {
+    if command_exists code; then
+        print_info "Visual Studio Code is already installed"
+    else
+        print_info "Installing Visual Studio Code via the Microsoft apt repository..."
+        sudo install -m 0755 -d /etc/apt/keyrings
+        curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > /tmp/packages.microsoft.gpg
+        sudo install -o root -g root -m 644 /tmp/packages.microsoft.gpg /etc/apt/keyrings/packages.microsoft.gpg
+        rm -f /tmp/packages.microsoft.gpg
+
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main" | \
+            sudo tee /etc/apt/sources.list.d/vscode.list > /dev/null
+
+        sudo apt update
+        sudo apt install -y code
+        print_success "Visual Studio Code installed"
+    fi
+}
+
+install_vscode_extensions() {
+    local extensions_file
+    extensions_file="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/vscode/extensions.txt"
+
+    if ! command_exists code; then
+        print_warning "code command not found, skipping VS Code extensions"
+        return
+    fi
+
+    if [ ! -f "$extensions_file" ]; then
+        print_warning "VS Code extension inventory not found, skipping"
+        return
+    fi
+
+    print_info "Installing VS Code extensions from $extensions_file..."
+    while IFS= read -r extension || [ -n "$extension" ]; do
+        [[ -z "$extension" || "$extension" =~ ^# ]] && continue
+        code --install-extension "$extension" --force
+    done < "$extensions_file"
+    print_success "VS Code extensions installed"
 }
 
 # ============================================
@@ -315,7 +516,12 @@ stow_dotfiles() {
     print_info "Stowing configs to ~/.config..."
     mkdir -p "$HOME/.config"
     stow -t "$HOME/.config" nvim starship tmux wezterm
-    
+
+    # Stow application launcher overrides to ~/.local/share
+    print_info "Stowing application launcher overrides to ~/.local/share..."
+    mkdir -p "$HOME/.local/share"
+    stow -t "$HOME/.local/share" applications
+
     print_success "Dotfiles stowed"
 }
 
@@ -355,6 +561,13 @@ main() {
     install_prerequisites
     install_linuxbrew
     install_brew_packages
+    install_gh
+    install_docker
+    install_nvm
+    install_node_ecosystem
+    install_duckdb
+    install_vscode
+    install_vscode_extensions
     install_ngrok
     install_tpm
     install_oh_my_bash
@@ -382,6 +595,9 @@ main() {
     echo "  2. Set 'GeistMono Nerd Font' as your terminal font"
     echo "  3. Select 'Catppuccin Mocha' profile in GNOME Terminal preferences"
     echo "  4. Run 'ngrok config add-authtoken <token>' if you plan to use ngrok"
+    echo "  5. Run 'gh auth login' to authenticate GitHub CLI"
+    echo "  6. Run 'gh extension install github/gh-copilot' for Copilot shell integration"
+    echo "  7. Log out and back in for Docker group membership to take effect"
     echo ""
 }
 

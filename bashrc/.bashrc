@@ -10,6 +10,7 @@ esac
 # Oh My Bash Configuration
 # ============================================
 export OSH="$HOME/.oh-my-bash"
+export DISABLE_AUTO_UPDATE="true"
 
 # Theme - empty because we use starship prompt
 OSH_THEME=""
@@ -109,10 +110,15 @@ export EDITOR=nvim
 export GOPATH="$HOME/go"
 export XDG_CONFIG_HOME="$HOME/.config"
 export SECURITY_TOOLS_DIR="$HOME/security"
+export NVM_DIR="$HOME/.config/nvm"
+export PNPM_HOME="$HOME/.local/share/pnpm"
+export BUN_INSTALL="$HOME/.bun"
 export FZF_DEFAULT_COMMAND='fd --type f --hidden --follow'
 
 # PATH
-export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$HOME/.vimpkg/bin:${GOPATH}/bin:$HOME/.cargo/bin:/home/linuxbrew/.linuxbrew/bin:$PATH
+export PATH="$HOME/.local/bin:$PNPM_HOME:$PNPM_HOME/bin:$BUN_INSTALL/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$HOME/.vimpkg/bin:${GOPATH}/bin:$HOME/.cargo/bin:/home/linuxbrew/.linuxbrew/bin:$PATH"
+[ -d "$HOME/flutter/bin" ] && export PATH="$HOME/flutter/bin:$PATH"
+[ -d /opt/android-studio/bin ] && export PATH="$PATH:/opt/android-studio/bin"
 
 # ============================================
 # Aliases
@@ -120,13 +126,19 @@ export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$HOME/.vimpkg/bin:${GOP
 
 # General Aliases
 alias la='tree'
-alias cat='bat'
-alias cd='z'
+if command -v bat &> /dev/null; then
+    alias cat='bat'
+fi
+if command -v zoxide &> /dev/null; then
+    alias cd='z'
+fi
 alias py='python3'
 alias cl='clear'
 
 # VIM Alias
 alias v="nvim"
+alias cc="codex --yolo"
+alias ccl="claude --dangerously-skip-permissions"
 
 # Git Aliases
 alias gss='git status'
@@ -161,13 +173,17 @@ alias .....="cd ../../../.."
 alias ......="cd ../../../../.."
 
 # Eza Aliases (modern ls replacement)
-alias l="eza -l --icons --git -a"
-alias ls="eza --icons --git"
-alias lt="eza --tree --level=2 --long --icons --git"
-alias ltree="eza --tree --level=2 --icons --git"
+if command -v eza &> /dev/null; then
+    alias l="eza -l --icons --git -a"
+    alias ls="eza --icons --git"
+    alias lt="eza --tree --level=2 --long --icons --git"
+    alias ltree="eza --tree --level=2 --icons --git"
+fi
 
 # HTTP Requests with xh
-alias http="xh"
+if command -v xh &> /dev/null; then
+    alias http="xh"
+fi
 
 # Nmap Alias
 alias nm="nmap -sC -sV -oN nmap"
@@ -195,8 +211,8 @@ ranger() {
     )
 
     "${ranger_cmd[@]}" "$@"
-    if [[ -f "$tempfile" ]] && [[ "$(cat -- "$tempfile")" != "$(echo -n "$(pwd)")" ]]; then
-        cd -- "$(cat "$tempfile")" || return
+    if [[ -f "$tempfile" ]] && [[ "$(command cat -- "$tempfile")" != "$(echo -n "$(pwd)")" ]]; then
+        cd -- "$(command cat "$tempfile")" || return
     fi
     command rm -f -- "$tempfile" 2>/dev/null
 }
@@ -216,57 +232,191 @@ update() {
     local GREEN='\033[0;32m'
     local BLUE='\033[0;34m'
     local RED='\033[0;31m'
+    local YELLOW='\033[1;33m'
     local NC='\033[0m' # No Color
+
+    local status_apt=0
+    local status_brew=0
+    local status_omb=0
+    local status_tmux=0
+    local status_nvim=0
+    local status_uv=0
+    local status_gh=0
+    local status_pnpm=0
+    local status_bun=0
 
     echo -e "${BLUE}========================================${NC}"
     echo -e "${BLUE}   Updating All Systems${NC}"
     echo -e "${BLUE}========================================${NC}"
     echo ""
 
-    # Update APT
+    # Check network connectivity
+    if ! ping -c 1 8.8.8.8 &> /dev/null; then
+        echo -e "${RED}[ERROR] No internet connection detected.${NC}"
+        return 1
+    fi
+
+    # Helper function for retries
+    retry() {
+        local n=1
+        local max=3
+        local delay=5
+        while true; do
+            if "$@"; then
+                return 0
+            else
+                if [[ $n -lt $max ]]; then
+                    ((n++))
+                    echo -e "${YELLOW}Command failed. Attempt $n/$max in ${delay}s...${NC}"
+                    sleep $delay
+                else
+                    return 1
+                fi
+            fi
+        done
+    }
+
+    # 1. APT
     if command -v apt &> /dev/null; then
-        echo -e "${BLUE}[1/5] Updating APT repositories...${NC}"
-        sudo apt update && sudo apt upgrade -y
-        echo -e "${GREEN}APT update complete${NC}"
+        echo -e "${BLUE}[1/9] Updating APT repositories...${NC}"
+        if sudo apt update && sudo apt upgrade -y --fix-missing; then
+            echo -e "${GREEN}APT update complete${NC}"
+        else
+            echo -e "${RED}APT update failed${NC}"
+            status_apt=1
+        fi
         echo ""
     fi
 
-    # Update Homebrew
+    # 2. Homebrew
     if command -v brew &> /dev/null; then
-        echo -e "${BLUE}[2/5] Updating Homebrew...${NC}"
-        brew update && brew upgrade
-        echo -e "${GREEN}Homebrew update complete${NC}"
+        echo -e "${BLUE}[2/9] Updating Homebrew...${NC}"
+        if retry brew update && brew upgrade; then
+            echo -e "${GREEN}Homebrew update complete${NC}"
+        else
+            echo -e "${RED}Homebrew update failed after retries${NC}"
+            status_brew=1
+        fi
+        brew cleanup -q 2>/dev/null || true
         echo ""
     fi
 
-    # Update Oh My Bash
-    if [ -d "$HOME/.oh-my-bash" ]; then
-        echo -e "${BLUE}[3/5] Updating Oh My Bash...${NC}"
-        cd "$HOME/.oh-my-bash" && git pull origin master
-        cd - > /dev/null
-        echo -e "${GREEN}Oh My Bash update complete${NC}"
+    # 3. Oh My Bash
+    if [ -d "$OSH" ]; then
+        echo -e "${BLUE}[3/9] Updating Oh My Bash...${NC}"
+        [ -f "$OSH/log/update.lock" ] && rm -f "$OSH/log/update.lock"
+        [ -d "$OSH/log/update.lock" ] && rm -rf "$OSH/log/update.lock"
+
+        if retry git -C "$OSH" pull --rebase --stat origin master; then
+            echo -e "${GREEN}Oh My Bash update complete${NC}"
+        else
+            echo -e "${RED}Oh My Bash update failed after retries${NC}"
+            status_omb=1
+        fi
         echo ""
     fi
 
-    # Update TPM plugins
+    # 4. Tmux plugins
     if [ -d "$HOME/.tmux/plugins/tpm" ]; then
-        echo -e "${BLUE}[4/5] Updating Tmux plugins...${NC}"
-        "$HOME/.tmux/plugins/tpm/bin/update_plugins" all
-        echo -e "${GREEN}Tmux plugins update complete${NC}"
+        echo -e "${BLUE}[4/9] Updating Tmux plugins...${NC}"
+        if retry "$HOME/.tmux/plugins/tpm/bin/update_plugins" all; then
+            echo -e "${GREEN}Tmux plugins update complete${NC}"
+        else
+            echo -e "${RED}Tmux plugin update failed after retries${NC}"
+            status_tmux=1
+        fi
         echo ""
     fi
 
-    # Update Neovim plugins
+    # 5. Neovim plugins
     if command -v nvim &> /dev/null; then
-        echo -e "${BLUE}[5/5] Updating Neovim plugins...${NC}"
-        nvim --headless "+Lazy! sync" +qa
-        echo -e "${GREEN}Neovim plugins update complete${NC}"
+        echo -e "${BLUE}[5/9] Updating Neovim plugins...${NC}"
+        if retry nvim --headless "+Lazy! sync" +qa; then
+            echo -e "${GREEN}Neovim plugins update complete${NC}"
+        else
+            echo -e "${RED}Neovim Lazy sync failed after retries${NC}"
+            status_nvim=1
+        fi
         echo ""
     fi
 
-    echo -e "${GREEN}========================================${NC}"
-    echo -e "${GREEN}   All updates complete!${NC}"
-    echo -e "${GREEN}========================================${NC}"
+    # 6. UV
+    if command -v uv &> /dev/null; then
+        echo -e "${BLUE}[6/9] Updating uv...${NC}"
+        if [[ "$(command -v uv)" == *"/home/linuxbrew/.linuxbrew/bin/uv" ]]; then
+            echo -e "${YELLOW}uv is managed by Homebrew, skipping self-update...${NC}"
+            status_uv=0
+        elif retry uv self update; then
+            echo -e "${GREEN}uv self-update complete${NC}"
+        else
+            echo -e "${RED}uv update failed after retries${NC}"
+            status_uv=1
+        fi
+        echo ""
+    fi
+
+    # 7. GitHub CLI Extensions
+    if command -v gh &> /dev/null; then
+        echo -e "${BLUE}[7/9] Updating GitHub CLI Extensions...${NC}"
+        if retry gh extension upgrade --all; then
+            echo -e "${GREEN}GH extensions update complete${NC}"
+        else
+            echo -e "${RED}GH extensions update failed after retries${NC}"
+            status_gh=1
+        fi
+        echo ""
+    fi
+
+    # 8. pnpm
+    if command -v pnpm &> /dev/null; then
+        echo -e "${BLUE}[8/9] Updating pnpm...${NC}"
+        if command -v corepack &> /dev/null; then
+            if retry corepack install -g pnpm@latest; then
+                echo -e "${GREEN}pnpm update complete (via corepack)${NC}"
+            else
+                echo -e "${RED}pnpm update failed after retries${NC}"
+                status_pnpm=1
+            fi
+        elif retry pnpm self-update; then
+             echo -e "${GREEN}pnpm update complete${NC}"
+        else
+             echo -e "${RED}pnpm update failed after retries${NC}"
+             status_pnpm=1
+        fi
+        echo ""
+    fi
+
+    # 9. bun
+    if command -v bun &> /dev/null; then
+        echo -e "${BLUE}[9/9] Updating bun...${NC}"
+        if retry bun upgrade; then
+             echo -e "${GREEN}bun update complete${NC}"
+        else
+             echo -e "${RED}bun update failed after retries${NC}"
+             status_bun=1
+        fi
+        echo ""
+    fi
+
+    echo -e "${BLUE}========================================${NC}"
+    echo -e "${BLUE}   Summary${NC}"
+    echo -e "${BLUE}========================================${NC}"
+
+    [ $status_apt -eq 0 ] && echo -e "${GREEN}[✓] APT${NC}" || echo -e "${RED}[✗] APT${NC}"
+    [ $status_brew -eq 0 ] && echo -e "${GREEN}[✓] Homebrew${NC}" || echo -e "${RED}[✗] Homebrew${NC}"
+    [ $status_omb -eq 0 ] && echo -e "${GREEN}[✓] Oh My Bash${NC}" || echo -e "${RED}[✗] Oh My Bash${NC}"
+    [ $status_tmux -eq 0 ] && echo -e "${GREEN}[✓] Tmux Plugins${NC}" || echo -e "${RED}[✗] Tmux Plugins${NC}"
+    [ $status_nvim -eq 0 ] && echo -e "${GREEN}[✓] Neovim Plugins${NC}" || echo -e "${RED}[✗] Neovim Plugins${NC}"
+    [ $status_uv -eq 0 ] && echo -e "${GREEN}[✓] uv${NC}" || echo -e "${RED}[✗] uv${NC}"
+    [ $status_gh -eq 0 ] && echo -e "${GREEN}[✓] GH Extensions${NC}" || echo -e "${RED}[✗] GH Extensions${NC}"
+    [ $status_pnpm -eq 0 ] && echo -e "${GREEN}[✓] pnpm${NC}" || echo -e "${RED}[✗] pnpm${NC}"
+    [ $status_bun -eq 0 ] && echo -e "${GREEN}[✓] bun${NC}" || echo -e "${RED}[✗] bun${NC}"
+
+    echo -e "${BLUE}========================================${NC}"
+    if [ $((status_apt + status_brew + status_omb + status_tmux + status_nvim + status_uv + status_gh + status_pnpm + status_bun)) -gt 0 ]; then
+        echo -e "${YELLOW}Note: Some updates failed. This is often due to network instability.${NC}"
+        echo -e "${YELLOW}Try running 'update' again when your connection is more stable.${NC}"
+    fi
 }
 
 # GitHub Copilot Suggest (ghcs)
@@ -406,6 +556,10 @@ EOF
 # Tool Initialization
 # ============================================
 
+# NVM and Node.js
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
+
 # FZF keybindings and completion
 [ -f ~/.fzf.bash ] && source ~/.fzf.bash
 [ -f /home/linuxbrew/.linuxbrew/opt/fzf/shell/completion.bash ] && source /home/linuxbrew/.linuxbrew/opt/fzf/shell/completion.bash
@@ -421,25 +575,24 @@ if command -v direnv &> /dev/null; then
     eval "$(direnv hook bash)"
 fi
 
+# Initialize uv
+if command -v uv &> /dev/null; then
+    eval "$(uv generate-shell-completion bash)"
+fi
+
 # Initialize starship prompt (should be at the end)
 if command -v starship &> /dev/null; then
     eval "$(starship init bash)"
 fi
-alias d='docker compose -f $HOME/projects/work/work-project/docker-compose.common.yml'
 
-export NVM_DIR="$HOME/.config/nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
-[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
-alias dr='d down && d build && d up -d'
+work_compose_file="$HOME/projects/work/work-project/docker-compose.common.yml"
+if [ -f "$work_compose_file" ]; then
+    alias d="docker compose -f $work_compose_file"
+    alias dr='d up -d --remove-orphans --no-build'
+    alias drb='d up -d --remove-orphans --build'
+    alias drf='d down --remove-orphans && d build && d up -d --remove-orphans'
+fi
+unset work_compose_file
 
-# pnpm
-export PNPM_HOME="$HOME/.local/share/pnpm"
-case ":$PATH:" in
-  *":$PNPM_HOME:"*) ;;
-  *) export PATH="$PNPM_HOME:$PATH" ;;
-esac
-# pnpm end
-
-# bun
-export BUN_INSTALL="$HOME/.bun"
-export PATH="$BUN_INSTALL/bin:$PATH"
+# Added by Antigravity CLI installer
+export PATH="$HOME/.local/bin:$PATH"
