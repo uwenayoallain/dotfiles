@@ -1,0 +1,30 @@
+# Core apt packages — needed on every machine, including headless servers.
+# One package per line. Lines starting with # and blank lines are ignored.
+
+apt-transport-https
+bash-completion
+bat
+build-essential
+ca-certificates
+curl
+dirmngr
+file
+git
+gpg
+jq
+ncdu
+net-tools
+openssh-server
+procps
+python3-pip
+python3-venv
+software-properties-common
+stow
+tmux
+tree
+unzip
+wget
+whois
+xclip
+xz-utils
+zip

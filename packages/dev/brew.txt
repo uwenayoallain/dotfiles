@@ -1,0 +1,6 @@
+# Development Homebrew formulae.
+
+ffuf
+flyctl
+gobuster
+jupyterlab

@@ -1,5 +1,9 @@
---ignore=.stowrc
---ignore=DS_Store
---ignore=install.sh
---ignore=setup.sh
---ignore=README.md
+--ignore=^\.stowrc$
+--ignore=^\.gitmodules$
+--ignore=^\.DS_Store$
+--ignore=^install\.sh$
+--ignore=^setup\.sh$
+--ignore=^README\.md$
+--ignore=^AGENTS\.md$
+--ignore=^CLAUDE\.md$
+--ignore=^GEMINI\.md$

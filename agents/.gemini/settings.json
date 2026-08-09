@@ -1,0 +1,26 @@
+{
+  "ide": {
+    "hasSeenNudge": true
+  },
+  "security": {
+    "auth": {
+      "selectedType": "oauth-personal"
+    }
+  },
+  "general": {
+    "previewFeatures": true,
+    "vimMode": true,
+    "sessionRetention": {
+      "enabled": true
+    },
+    "enablePromptCompletion": true
+  },
+  "output": {
+    "format": "text"
+  },
+  "ui": {
+    "footer": {
+      "hideContextPercentage": false
+    }
+  }
+}

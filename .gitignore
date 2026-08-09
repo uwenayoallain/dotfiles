@@ -1,5 +1,57 @@
 .DS_Store
-tmux/plugins/
+history.txt
 raycast
 fzf
-history.txt
+
+# ── Secrets ────────────────────────────────────────────────────────────
+# This repo tracks agent, editor, and shell configuration, so the ignore
+# list has to be aggressive. Anything matching these patterns is blocked
+# no matter which directory it lands in.
+.credentials.json
+.credentials*
+credentials.json
+auth.json
+*oauth*
+*token*
+*_token
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+id_ecdsa*
+*.kdbx
+.env
+.env.*
+!.env.example
+.netrc
+.npmrc
+.pypirc
+*.gpg
+*.asc
+!**/keyrings/*.asc
+
+# Machine- or session-specific agent state that should never be shared
+**/sessions/
+**/history.jsonl
+**/*.sqlite
+**/installation_id
+**/google_accounts.json
+**/trustedFolders.json
+**/statsig/
+**/shell-snapshots/
+**/shell_snapshots/
+**/projects/
+**/logs/
+**/cache/
+**/.last-*
+
+# ── Runtime state ──────────────────────────────────────────────────────
+# TPM installs plugins here at runtime; the repo tracks them as submodules
+# under tmux/tmux/plugins instead.
+tmux/plugins/
+
+# Snapshot output waiting for triage — review, then move entries into the
+# right packages/<tier>/ file and delete this directory.
+packages/unsorted/

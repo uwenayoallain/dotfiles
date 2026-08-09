@@ -1,0 +1,6 @@
+# Snap packages. Append " --classic" or " --edge" after the name when needed.
+
+brave
+firefox
+spotify
+slack-term --edge

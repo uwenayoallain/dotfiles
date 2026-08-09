@@ -1,0 +1,34 @@
+# Desktop / GUI apt packages.
+# Several of these live in third-party repositories that lib/apt.sh adds first.
+
+antigravity
+anydesk
+claude-desktop
+code
+dconf-cli
+evolution
+evolution-ews
+flatpak
+freerdp3-x11
+geary
+gnome-software-plugin-flatpak
+gnome-terminal
+google-chrome-beta
+google-chrome-stable
+libfuse2t64
+libglu1-mesa
+mesa-utils
+obs-studio
+qbittorrent
+stacer
+tableplus
+uuid-runtime
+vlc
+windsurf
+
+# Not from a repository — installed by lib/apps.sh from a GitHub release:
+#   appimagelauncher
+#
+# XnView MP is installed as a Flatpak instead of the .deb (see flatpak.txt).
+#
+# See packages/desktop/manual.md for apps that must be downloaded by hand.

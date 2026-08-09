@@ -27,7 +27,6 @@ file-icons.file-icons
 formulahendry.auto-close-tag
 formulahendry.auto-rename-tag
 github.codespaces
-github.copilot-chat
 github.vscode-pull-request-github
 google.colab
 gruntfuggly.todo-tree
@@ -43,6 +42,7 @@ modular-mojotools.vscode-mojo
 mongodb.mongodb-vscode
 ms-azuretools.vscode-containers
 ms-azuretools.vscode-docker
+msjsdiag.vscode-react-native
 ms-ossdata.vscode-pgsql
 ms-python.debugpy
 ms-python.python
@@ -53,11 +53,11 @@ ms-toolsai.jupyter-keymap
 ms-toolsai.jupyter-renderers
 ms-toolsai.vscode-jupyter-cell-tags
 ms-toolsai.vscode-jupyter-slideshow
+ms-vscode.makefile-tools
 ms-vscode-remote.remote-containers
 ms-vscode-remote.remote-wsl
 ms-vscode.vscode-websearchforcopilot
 ms-vsliveshare.vsliveshare
-msjsdiag.vscode-react-native
 njpwerner.autodocstring
 openai.chatgpt
 orta.vscode-jest
@@ -69,6 +69,7 @@ ritwickdey.liveserver
 rvest.vs-code-prettier-eslint
 shahilkumar.docxreader
 svelte.svelte-vscode
+toba.vsfire
 tomoki1207.pdf
 vercel.turbo-vsc
 vmware.vscode-boot-dev-pack

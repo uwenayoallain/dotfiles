@@ -1,0 +1,13 @@
+{
+	"servers": {
+		"html.to.design": {
+			"type": "sse",
+			"url": "https://h2d-mcp.divriots.com/01a4505b-9096-4a49-af28-d8e7884354c7/sse"
+    },
+    "posthog": {
+      "type": "http",
+      "url": "https://mcp.posthog.com/mcp"
+    }
+	},
+	"inputs": []
+}

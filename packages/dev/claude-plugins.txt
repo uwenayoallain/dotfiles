@@ -1,0 +1,16 @@
+# Claude Code plugin marketplaces and plugins.
+#
+# Lines starting with "marketplace " are added first, then plugins are
+# installed from them. ~/.claude/settings.json (stowed from agents/) already
+# lists these under enabledPlugins, so this manifest only has to make sure the
+# marketplaces are registered and the plugins are fetched.
+
+marketplace claude-plugins-official anthropics/claude-plugins-official
+
+code-review@claude-plugins-official
+commit-commands@claude-plugins-official
+context7@claude-plugins-official
+feature-dev@claude-plugins-official
+frontend-design@claude-plugins-official
+typescript-lsp@claude-plugins-official
+posthog@claude-plugins-official

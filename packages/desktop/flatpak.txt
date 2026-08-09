@@ -1,0 +1,5 @@
+# Flatpak application IDs (installed --user from flathub).
+
+com.belmoussaoui.Decoder
+com.freerdp.FreeRDP
+com.xnview.XnViewMP

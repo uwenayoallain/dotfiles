@@ -1,0 +1,14 @@
+# Core Homebrew formulae — the CLI tools the shell config depends on.
+# Removing any of these degrades .bashrc aliases or prompt.
+
+direnv
+eza
+fd
+fzf
+neovim
+ranger
+ripgrep
+starship
+uv
+xh
+zoxide

@@ -1,0 +1,14 @@
+# Host-specific apt packages. NOT installed by default — these depend on the
+# actual hardware and filesystem layout of the machine.
+#
+#   ./install.sh --tier optional
+#
+# Check that the NVIDIA driver version still matches what the new machine needs
+# before running this tier (`ubuntu-drivers devices`).
+
+exfat-fuse
+exfatprogs
+linux-modules-nvidia-550-generic-hwe-24.04
+ntfs-3g
+nvidia-driver-550
+zfsutils-linux

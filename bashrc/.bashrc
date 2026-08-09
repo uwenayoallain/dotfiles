@@ -40,7 +40,6 @@ completions=(
     docker
     docker-compose
     makefile
-    npm
     pip
     pip3
     tmux
@@ -419,6 +418,218 @@ update() {
     fi
 }
 
+# ─── Terminal UI helpers ──────────────────────────────────────────────
+# Animated single-line progress bar that never wraps the terminal.
+# Usage: call ui_progress <current> <total> <title> [detail] repeatedly
+# while working, then ui_progress_done when finished.
+#   ⠸ Scanning $HOME █████████░░░░░░░░░░░░░  42% (10/24) projects
+ui_progress() {
+    local current=$1 total=$2 title=$3 detail=${4:-}
+    local frames='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+    local cols=${COLUMNS:-$(tput cols 2>/dev/null || echo 80)}
+    local pct=0
+    [ "$total" -gt 0 ] && pct=$(( current * 100 / total ))
+    (( pct > 100 )) && pct=100
+    _ui_frame=$(( (${_ui_frame:-0} + 1) % 10 ))
+    local counter="(${current}/${total})"
+    # Shrink the bar on narrow terminals so the line never wraps
+    local bar_w=$(( cols - ${#title} - ${#counter} - 13 ))
+    (( bar_w > 22 )) && bar_w=22
+    if (( bar_w < 5 )); then
+        printf '\r\033[K \033[1;36m%s\033[0m %3d%%' "${frames:$_ui_frame:1}" "$pct"
+        return
+    fi
+    local filled bar='' i
+    filled=$(( pct * bar_w / 100 ))
+    for (( i = 0; i < bar_w; i++ )); do
+        if (( i < filled )); then bar+='█'; else bar+='░'; fi
+    done
+    # Truncate the detail text with whatever width remains
+    local avail=$(( cols - ${#title} - bar_w - ${#counter} - 13 ))
+    (( avail < 0 )) && avail=0
+    detail=${detail:0:avail}
+    printf '\r\033[K \033[1;36m%s\033[0m %s \033[32m%s\033[0m %3d%% \033[2m%s %s\033[0m' \
+        "${frames:_ui_frame:1}" "$title" "$bar" "$pct" "$counter" "$detail"
+}
+ui_progress_done() { printf '\r\033[K'; }
+
+# Disk cleanup function - frees space by clearing caches and safe temporary files
+cleanup() {
+    local GREEN='\033[0;32m'
+    local BLUE='\033[0;34m'
+    local RED='\033[0;31m'
+    local YELLOW='\033[1;33m'
+    local NC='\033[0m' # No Color
+
+    local before_kb
+    before_kb=$(df --output=avail / | tail -1 | tr -dc '0-9')
+
+    # On ZFS, df on / only reflects the root dataset; report pool usage instead
+    disk_usage_line() {
+        if command -v zpool &> /dev/null && zpool list rpool &> /dev/null; then
+            zpool list -H -o alloc,size,capacity rpool | awk '{printf "Disk: %s used of %s (%s)\n", $1, $2, $3}'
+        else
+            df -h / | tail -1 | awk '{printf "Disk: %s used of %s (%s)\n", $3, $2, $5}'
+        fi
+    }
+
+    echo -e "${BLUE}========================================${NC}"
+    echo -e "${BLUE}   Cleaning Up Disk Space${NC}"
+    echo -e "${BLUE}========================================${NC}"
+    disk_usage_line
+    echo ""
+
+    # Ask for the sudo password once and keep the credential fresh
+    # so later sudo steps never re-prompt
+    local sudo_keepalive_pid=""
+    if command -v sudo &> /dev/null; then
+        if ! sudo -v; then
+            echo -e "${RED}sudo authentication failed; skipping steps that need it${NC}"
+        else
+            sudo_keepalive_pid=$( { while true; do sudo -n true 2>/dev/null; sleep 60; done >/dev/null 2>&1 & echo $!; } )
+        fi
+    fi
+
+    # 1. APT caches and orphaned packages
+    if command -v apt-get &> /dev/null; then
+        echo -e "${BLUE}[1/8] Cleaning APT caches...${NC}"
+        if sudo -n apt-get autoremove -y --purge && sudo -n apt-get clean; then
+            echo -e "${GREEN}APT cleanup complete${NC}"
+        else
+            echo -e "${RED}APT cleanup failed${NC}"
+        fi
+        echo ""
+    fi
+
+    # 2. Homebrew caches and outdated downloads
+    if command -v brew &> /dev/null; then
+        echo -e "${BLUE}[2/8] Cleaning Homebrew caches...${NC}"
+        brew cleanup --prune=all 2>/dev/null || true
+        echo -e "${GREEN}Homebrew cleanup complete${NC}"
+        echo ""
+    fi
+
+    # 3. Systemd journal logs older than 7 days
+    if command -v journalctl &> /dev/null; then
+        echo -e "${BLUE}[3/8] Vacuuming journal logs (keeping 7 days)...${NC}"
+        sudo -n journalctl --vacuum-time=7d 2>/dev/null || true
+        echo -e "${GREEN}Journal cleanup complete${NC}"
+        echo ""
+    fi
+
+    # 4. User cache files not touched in 30 days
+    if [ -d "$HOME/.cache" ]; then
+        echo -e "${BLUE}[4/8] Removing ~/.cache files older than 30 days...${NC}"
+        find "$HOME/.cache" -type f -atime +30 -delete 2>/dev/null || true
+        find "$HOME/.cache" -mindepth 1 -type d -empty -delete 2>/dev/null || true
+        echo -e "${GREEN}User cache cleanup complete${NC}"
+        echo ""
+    fi
+
+    # 5. Trash older than 30 days
+    if [ -d "$HOME/.local/share/Trash" ]; then
+        echo -e "${BLUE}[5/8] Emptying trash items older than 30 days...${NC}"
+        find "$HOME/.local/share/Trash/files" -mindepth 1 -mtime +30 -exec rm -rf {} + 2>/dev/null || true
+        find "$HOME/.local/share/Trash/info" -mindepth 1 -mtime +30 -delete 2>/dev/null || true
+        echo -e "${GREEN}Trash cleanup complete${NC}"
+        echo ""
+    fi
+
+    # 6. Language/package-manager caches (pip, uv, npm, pnpm, bun)
+    echo -e "${BLUE}[6/8] Cleaning language package caches...${NC}"
+    command -v pip &> /dev/null && pip cache purge 2>/dev/null || true
+    command -v uv &> /dev/null && uv cache clean 2>/dev/null || true
+    command -v npm &> /dev/null && npm cache clean --force 2>/dev/null || true
+    command -v pnpm &> /dev/null && pnpm store prune 2>/dev/null || true
+    [ -d "$HOME/.bun/install/cache" ] && rm -rf "$HOME/.bun/install/cache"/* 2>/dev/null || true
+    echo -e "${GREEN}Package cache cleanup complete${NC}"
+    echo ""
+
+    # 7. Stale Neovim swap/undo files older than 30 days
+    echo -e "${BLUE}[7/8] Removing stale Neovim swap/undo files...${NC}"
+    find "$HOME/.local/state/nvim/swap" -type f -mtime +30 -delete 2>/dev/null || true
+    find "$HOME/.local/state/nvim/undo" -type f -mtime +30 -delete 2>/dev/null || true
+    echo -e "${GREEN}Neovim state cleanup complete${NC}"
+    echo ""
+
+    # 8. Thumbnail cache
+    echo -e "${BLUE}[8/8] Clearing thumbnail cache...${NC}"
+    rm -rf "$HOME/.cache/thumbnails"/* 2>/dev/null || true
+    echo -e "${GREEN}Thumbnail cleanup complete${NC}"
+    echo ""
+
+    [ -n "$sudo_keepalive_pid" ] && kill "$sudo_keepalive_pid" 2>/dev/null
+
+    local after_kb freed_mb
+    after_kb=$(df --output=avail / | tail -1 | tr -dc '0-9')
+    freed_mb=$(( (after_kb - before_kb) / 1024 ))
+    [ "$freed_mb" -lt 0 ] && freed_mb=0
+
+    echo -e "${BLUE}========================================${NC}"
+    echo -e "${BLUE}   Summary${NC}"
+    echo -e "${BLUE}========================================${NC}"
+    disk_usage_line
+    echo -e "${GREEN}Freed approximately ${freed_mb} MB${NC}"
+    echo -e "${YELLOW}Tip: 'docker system prune' and 'sudo apt autoclean' can free more if needed.${NC}"
+    echo ""
+
+    # Report (but never touch) the biggest storage consumers
+    echo -e "${BLUE}========================================${NC}"
+    echo -e "${BLUE}   Largest Storage Consumers (report only)${NC}"
+    echo -e "${BLUE}========================================${NC}"
+    if command -v zfs &> /dev/null && zfs list rpool &> /dev/null; then
+        echo -e "${YELLOW}ZFS datasets:${NC}"
+        zfs list -r -o name,used -S used rpool 2>/dev/null | head -6
+        echo ""
+    fi
+    echo -e "${YELLOW}Top 10 directories in \$HOME:${NC}"
+    local scan_dirs=() scan_tmp scan_dir scan_pid scan_i=0
+    mapfile -t scan_dirs < <(find "$HOME" -mindepth 1 -maxdepth 1 -type d | sort)
+    scan_tmp=$(mktemp)
+    # Subshell keeps interactive job-control notices out of the output
+    (
+        for scan_dir in "${scan_dirs[@]}"; do
+            scan_i=$((scan_i + 1))
+            du -xsb "$scan_dir" >> "$scan_tmp" 2>/dev/null &
+            scan_pid=$!
+            while kill -0 "$scan_pid" 2>/dev/null; do
+                ui_progress "$scan_i" "${#scan_dirs[@]}" 'Scanning $HOME' "${scan_dir##*/}"
+                sleep 0.1
+            done
+            wait "$scan_pid" 2>/dev/null
+        done
+        ui_progress_done
+    )
+    sort -rn "$scan_tmp" | head -10 | while IFS=$'\t' read -r scan_bytes scan_path; do
+        printf '%s\t%s\n' "$(numfmt --to=iec "$scan_bytes")" "$scan_path"
+    done
+    rm -f "$scan_tmp"
+    echo -e "${YELLOW}Nothing above was deleted — review manually before removing.${NC}"
+}
+
+# Occasional disk space check - runs at most once a day on shell startup
+# and suggests 'cleanup' when the root filesystem is nearly full
+disk_check() {
+    local threshold=85
+    local usage
+    # On ZFS, df on / only reflects the root dataset; use pool capacity instead
+    if command -v zpool &> /dev/null && zpool list rpool &> /dev/null; then
+        usage=$(zpool list -H -o capacity rpool | tr -dc '0-9')
+    else
+        usage=$(df --output=pcent / | tail -1 | tr -dc '0-9')
+    fi
+    if [ -n "$usage" ] && [ "$usage" -ge "$threshold" ]; then
+        echo -e "\033[1;33m[!] Disk usage at ${usage}% — run 'cleanup' to free space.\033[0m"
+    fi
+}
+
+_disk_check_stamp="$HOME/.cache/.disk_check_stamp"
+if [ ! -f "$_disk_check_stamp" ] || [ -n "$(find "$_disk_check_stamp" -mmin +1440 2>/dev/null)" ]; then
+    mkdir -p "$HOME/.cache" && touch "$_disk_check_stamp"
+    disk_check
+fi
+unset _disk_check_stamp
+
 # GitHub Copilot Suggest (ghcs)
 ghcs() {
     local FUNCNAME="${FUNCNAME[0]}"
@@ -594,5 +805,18 @@ if [ -f "$work_compose_file" ]; then
 fi
 unset work_compose_file
 
-# Added by Antigravity CLI installer
+work_v2_dir="$HOME/projects/work/work-project-v2"
+work_v2_compose_file="$work_v2_dir/infrastructure/docker/docker-compose.dev.yml"
+work_v2_env_file="$work_v2_dir/infrastructure/docker/.env"
+if [ -f "$work_v2_compose_file" ]; then
+    alias ov2="docker compose --env-file $work_v2_env_file -f $work_v2_compose_file"
+    alias ov2up='ov2 up -d --build'
+fi
+unset work_v2_dir work_v2_compose_file work_v2_env_file
+
+# Antigravity CLI
 export PATH="$HOME/.local/bin:$PATH"
+
+# Vite+ (https://viteplus.dev) — guarded so a machine without it still gets a
+# working shell instead of an error on every prompt.
+[ -f "$HOME/.vite-plus/env" ] && . "$HOME/.vite-plus/env"

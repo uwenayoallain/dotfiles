@@ -1,0 +1,33 @@
+[submodule "catppuccin-tmux"]
+	path = tmux/tmux/plugins/catppuccin-tmux
+	url = https://github.com/omerxx/catppuccin-tmux
+[submodule "tmux-continuum"]
+	path = tmux/tmux/plugins/tmux-continuum
+	url = https://github.com/tmux-plugins/tmux-continuum
+[submodule "tmux-floax"]
+	path = tmux/tmux/plugins/tmux-floax
+	url = https://github.com/omerxx/tmux-floax
+[submodule "tmux-fzf"]
+	path = tmux/tmux/plugins/tmux-fzf
+	url = https://github.com/sainnhe/tmux-fzf
+[submodule "tmux-fzf-url"]
+	path = tmux/tmux/plugins/tmux-fzf-url
+	url = https://github.com/wfxr/tmux-fzf-url
+[submodule "tmux-resurrect"]
+	path = tmux/tmux/plugins/tmux-resurrect
+	url = https://github.com/tmux-plugins/tmux-resurrect
+[submodule "tmux-sensible"]
+	path = tmux/tmux/plugins/tmux-sensible
+	url = https://github.com/tmux-plugins/tmux-sensible
+[submodule "tmux-sessionx"]
+	path = tmux/tmux/plugins/tmux-sessionx
+	url = https://github.com/omerxx/tmux-sessionx
+[submodule "tmux-thumbs"]
+	path = tmux/tmux/plugins/tmux-thumbs
+	url = https://github.com/fcsonline/tmux-thumbs
+[submodule "tmux-yank"]
+	path = tmux/tmux/plugins/tmux-yank
+	url = https://github.com/tmux-plugins/tmux-yank
+[submodule "tpm"]
+	path = tmux/tmux/plugins/tpm
+	url = https://github.com/tmux-plugins/tpm

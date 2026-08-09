@@ -1,0 +1,3 @@
+# Global bun packages.
+
+opencode-ai

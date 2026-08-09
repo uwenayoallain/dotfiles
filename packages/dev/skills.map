@@ -1,0 +1,11 @@
+# Agent skill fan-out.
+#
+# The skills themselves live once in ~/.agents/skills (stowed from skills/).
+# Each agent then gets symlinks to the subset it should see. This is how the
+# current machine is already wired; lib/skills.sh just makes it reproducible.
+#
+# Format:  <skills-dir relative to $HOME>: <skill> [<skill>...]  |  all
+
+.claude/skills: find-skills frontend-design improve skill-creator turborepo
+.gemini/skills: all
+.config/opencode/skills: find-skills frontend-design skill-creator

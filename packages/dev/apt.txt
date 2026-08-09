@@ -1,0 +1,23 @@
+# Development apt packages.
+# Several of these live in third-party repositories that lib/apt.sh adds first.
+
+clang
+cmake
+containerd.io
+docker-buildx-plugin
+docker-ce
+docker-ce-cli
+docker-compose-plugin
+gh
+maven
+openjdk-21-jdk
+ngrok
+ninja-build
+nmap
+podman
+podman-compose
+r-base
+shellcheck
+shfmt
+tailscale
+tailscale-archive-keyring
