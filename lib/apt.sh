@@ -112,9 +112,6 @@ install_apt_repos() {
         /usr/share/keyrings/google-chrome.gpg "$SOURCES_DIR/google-chrome.sources" \
         "$(deb822 "Google Chrome" https://dl.google.com/linux/chrome-stable/deb/ stable /usr/share/keyrings/google-chrome.gpg)"
 
-    add_vendor_repo google-chrome-beta "https://dl.google.com/linux/linux_signing_key.pub" \
-        /usr/share/keyrings/google-chrome-beta.gpg "$SOURCES_DIR/google-chrome-beta.sources" \
-        "$(deb822 "Google Chrome (beta)" https://dl.google.com/linux/chrome-beta/deb/ stable /usr/share/keyrings/google-chrome-beta.gpg)"
 
     add_vendor_repo vscode "https://packages.microsoft.com/keys/microsoft.asc" \
         /usr/share/keyrings/microsoft.gpg "$SOURCES_DIR/vscode.sources" \

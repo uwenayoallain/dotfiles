@@ -1,41 +1,31 @@
 #!/usr/bin/env bash
 
-# NVM, Node LTS, and the global packages listed in packages/*/{npm,pnpm,bun}.txt.
+# Vite+ (Node versions), and the global packages listed in packages/*/{npm,pnpm,bun}.txt.
 
-NVM_VERSION=v0.40.3
 
 install_node() {
     print_step "Installing Node toolchain"
 
-    export NVM_DIR="$HOME/.config/nvm"
-
-    if [ -s "$NVM_DIR/nvm.sh" ]; then
-        mark_present "NVM"
+    # Vite+ manages Node: versions, the global default, and the node/npm/npx
+    # shims in ~/.vite-plus/bin. One manager, so there is never a second Node
+    # whose global packages shadow or hide the first one's.
+    if [ -d "$HOME/.vite-plus" ]; then
+        mark_present "Vite+"
     else
-        print_info "Installing NVM..."
-        run mkdir -p "$NVM_DIR"
-        shielded bash -c "curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/$NVM_VERSION/install.sh | NVM_DIR='$NVM_DIR' bash"
-        print_success "NVM installed"
+        print_info "Installing Vite+..."
+        shielded bash -c "curl -fsSL https://viteplus.dev/install.sh | bash" \
+            || { print_warning "Vite+ install failed, skipping the Node toolchain"; return 0; }
     fi
+    export VP_HOME="$HOME/.vite-plus"
+    export PATH="$VP_HOME/bin:$PATH"
 
-    if [ "$DRY_RUN" = true ]; then
-        # Load nvm read-only so the probes below see what is really installed.
-        [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && nvm use default > /dev/null 2>&1
-        if command_exists node; then mark_present "node $(node --version)"; else print_dry "nvm install --lts && nvm alias default 'lts/*'"; fi
-    else
-        # shellcheck disable=SC1091
-        . "$NVM_DIR/nvm.sh"
-        if ! grep -q 'v[0-9]' < <(nvm ls --lts --no-colors 2>/dev/null); then
-            nvm install --lts
-        fi
-        [ "$(nvm alias default 2>/dev/null | grep -c 'lts/\*')" -gt 0 ] || nvm alias default 'lts/*' > /dev/null
-        nvm use default > /dev/null
+    if command_exists node; then
         mark_present "node $(node --version)"
+    else
+        run vp env default lts || print_warning "Could not set up Node LTS with Vite+"
     fi
 
-    if command_exists corepack && ! command_exists pnpm; then
-        run corepack enable pnpm
-    fi
+    install_corepack_wrappers
 
     if command_exists bun; then
         mark_present "bun"
@@ -55,6 +45,30 @@ install_node() {
     install_globals bun bun add -g
 
     flush_present "node tools"
+}
+
+# pnpm, pnpx, yarn and yarnpkg as tiny wrappers around `corepack`, found on
+# PATH through Vite+'s shims. `corepack enable` would instead symlink into one
+# specific Node version's directory, which breaks the day that version is
+# upgraded or cleaned away.
+install_corepack_wrappers() {
+    local tool dir="$HOME/.local/bin" added=()
+    for tool in pnpm pnpx yarn yarnpkg; do
+        if [ -f "$dir/$tool" ] && grep -q 'exec corepack' "$dir/$tool" 2>/dev/null; then
+            continue
+        fi
+        if [ "$DRY_RUN" = true ]; then
+            print_dry "write $dir/$tool (corepack wrapper)"
+            continue
+        fi
+        mkdir -p "$dir"
+        rm -f "$dir/$tool"
+        printf '#!/bin/sh\n# corepack wrapper (dotfiles lib/node.sh): follows whichever Node is current.\nexec corepack %s "$@"\n' "$tool" > "$dir/$tool"
+        chmod +x "$dir/$tool"
+        added+=("$tool")
+    done
+    [ ${#added[@]} -gt 0 ] && print_info "corepack wrappers: ${added[*]}"
+    mark_present "pnpm/yarn via corepack"
 }
 
 # install_globals <manifest-name> <install command...>

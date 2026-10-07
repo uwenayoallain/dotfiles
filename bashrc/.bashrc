@@ -109,7 +109,6 @@ export EDITOR=nvim
 export GOPATH="$HOME/go"
 export XDG_CONFIG_HOME="$HOME/.config"
 export SECURITY_TOOLS_DIR="$HOME/security"
-export NVM_DIR="$HOME/.config/nvm"
 export PNPM_HOME="$HOME/.local/share/pnpm"
 export BUN_INSTALL="$HOME/.bun"
 export FZF_DEFAULT_COMMAND='fd --type f --hidden --follow'
@@ -764,10 +763,6 @@ EOF
 # ============================================
 # Tool Initialization
 # ============================================
-
-# NVM and Node.js
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
 
 # FZF keybindings and completion
 [ -f ~/.fzf.bash ] && source ~/.fzf.bash

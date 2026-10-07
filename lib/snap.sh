@@ -20,7 +20,7 @@ install_snaps() {
     local entry name present=0 installed
     installed=$(snap list 2>/dev/null | awk 'NR > 1 {print $1}')
     for entry in "${entries[@]}"; do
-        # Entries may carry flags, e.g. "slack-term --edge".
+        # Entries may carry flags, e.g. "some-app --edge".
         read -ra parts <<< "$entry"
         name="${parts[0]}"
         if grep -qx "$name" <<< "$installed"; then

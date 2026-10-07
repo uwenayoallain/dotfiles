@@ -250,10 +250,8 @@
   "todo-tree.ripgrep": "/home/linuxbrew/.linuxbrew/bin/rg",
   "chat.viewSessions.orientation": "stacked",
   "workbench.statusBar.visible": false,
-  "window.commandCenter": false,
   "workbench.browser.showInTitleBar": false,
   "chat.titleBar.openInAgentsWindow.enabled": false,
-  "workbench.layoutControl.enabled": false,
   "makefile.configureOnOpen": true,
   "gitlens.views.scm.grouped.views": {
     "commits": true,
@@ -268,4 +266,5 @@
     "searchAndCompare": false,
     "launchpad": true,
   },
+  "window.commandCenter": false,
 }

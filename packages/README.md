@@ -9,7 +9,7 @@ whether you asked for `core` alone or `core,dev,desktop`.
 | Tier | Runs by default | For |
 | --- | --- | --- |
 | `core` | yes | Shell, build tools, and the CLI utilities `.bashrc` depends on. Safe on a headless server. |
-| `dev` | yes | Docker, podman, Node/Java, AI CLIs, VS Code, agent skills. |
+| `dev` | yes | Docker, Node (Vite+), Java, AI CLIs, VS Code, agent skills. |
 | `desktop` | yes | Browsers, GUI apps, snaps, flatpaks, fonts, GNOME settings. |
 | `optional` | **no** | Host-specific: NVIDIA driver, ZFS, NTFS/exFAT. Check the hardware first. |
 
@@ -31,7 +31,7 @@ ripgrep          # modern grep
 | --- | --- | --- |
 | `apt.txt` | `lib/apt.sh` | package name |
 | `brew.txt` | `lib/brew.sh` | formula name |
-| `snap.txt` | `lib/snap.sh` | name, plus optional flags: `slack-term --edge` |
+| `snap.txt` | `lib/snap.sh` | name, plus optional flags: `some-app --edge` |
 | `flatpak.txt` | `lib/snap.sh` | application ID, installed `--user` from flathub |
 | `npm.txt` `pnpm.txt` `bun.txt` | `lib/node.sh` | package spec |
 | `vscode.txt` | `lib/desktop.sh` | `publisher.extension` |

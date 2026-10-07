@@ -8,7 +8,7 @@
 
 exfat-fuse
 exfatprogs
-linux-modules-nvidia-550-generic-hwe-24.04
+linux-modules-nvidia-580-generic-hwe-24.04
 ntfs-3g
-nvidia-driver-550
+nvidia-driver-580
 zfsutils-linux

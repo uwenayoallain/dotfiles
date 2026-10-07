@@ -10,10 +10,7 @@ evolution
 evolution-ews
 flatpak
 freerdp3-x11
-geary
-gnome-software-plugin-flatpak
 gnome-terminal
-google-chrome-beta
 google-chrome-stable
 libfuse2t64
 libglu1-mesa
@@ -28,7 +25,6 @@ vlc
 # Not from a repository — installed by lib/apps.sh from a GitHub release:
 #   appimagelauncher
 #
-# XnView MP is installed as a Flatpak instead of the .deb (see flatpak.txt).
 #
 # See packages/desktop/manual.md for apps that must be downloaded by hand.
 

@@ -38,7 +38,7 @@ fi
 
 # shellcheck source=lib/common.sh
 . "$DOTFILES_DIR/lib/common.sh"
-for module in apt brew snap node sdk apps shell desktop skills stow tuning private pick; do
+for module in apt brew snap node apps shell desktop skills stow tuning private pick; do
     # shellcheck disable=SC1090
     . "$DOTFILES_DIR/lib/$module.sh"
 done
@@ -55,8 +55,7 @@ MODULES=(
     "brew:Linuxbrew and its formulae"
     "snap:Snap packages"
     "flatpak:Flatpak applications"
-    "node:NVM, Node LTS, npm/pnpm/bun globals"
-    "sdk:Vite+ toolchain"
+    "node:Vite+ (Node versions), pnpm, bun, global packages"
     "apps:DuckDB, AI CLIs, miniserve, AppImageLauncher"
     "shell:Oh My Bash, TPM, fonts, terminal theme"
     "vscode:VS Code extensions"
@@ -71,14 +70,13 @@ MODULES=(
 # tier is active, so `--tier core` produces a genuinely headless install.
 # Anything not listed (apt, brew, shell, stow) runs in every tier.
 # Modules that run something under sudo. Everything else works unprivileged.
-ROOT_MODULES=(apt brew snap flatpak sdk apps shell tuning)
+ROOT_MODULES=(apt brew snap flatpak apps shell tuning)
 
 declare -A MODULE_TIER=(
     [snap]=desktop
     [flatpak]=desktop
     [gnome]=desktop
     [node]=dev
-    [sdk]=dev
     [apps]=dev
     [vscode]=dev
     [skills]=dev
@@ -165,7 +163,7 @@ main() {
 
     # Section headers each module prints, so steps can be numbered "[n/total]".
     local -A module_steps=(
-        [apt]=2 [brew]=1 [snap]=1 [flatpak]=1 [node]=1 [sdk]=1 [apps]=1
+        [apt]=2 [brew]=1 [snap]=1 [flatpak]=1 [node]=1 [apps]=1
         [shell]=1 [vscode]=1 [gnome]=1 [tuning]=2 [stow]=2 [skills]=2 [private]=1
     )
     local entry name enabled=()
@@ -213,7 +211,6 @@ main() {
     if module_enabled snap; then install_snaps; fi
     if module_enabled flatpak; then install_flatpaks; fi
     if module_enabled node; then install_node; fi
-    if module_enabled sdk; then install_sdks; fi
     if module_enabled apps; then install_apps; fi
     if module_enabled shell; then install_shell_env; fi
     if module_enabled vscode; then install_vscode_extensions; fi

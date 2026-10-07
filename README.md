@@ -51,7 +51,7 @@ git submodule update --init --recursive
 | Tier | What it covers | Modules it enables |
 | --- | --- | --- |
 | `core` | Shell, build tools, and the CLI utilities `.bashrc` depends on. Safe on a server. | `apt` `brew` `shell` `stow` |
-| `dev` | Docker, podman, Node/Java, AI CLIs, VS Code, agent skills. | `node` `sdk` `apps` `vscode` `skills` |
+| `dev` | Docker, Node (Vite+), Java, AI CLIs, VS Code, agent skills. | `node` `apps` `vscode` `skills` |
 | `desktop` | Browsers, GUI apps, snaps, flatpaks, fonts, GNOME theme and settings. | `snap` `flatpak` `gnome` |
 | `optional` | Host-specific: NVIDIA driver, ZFS, NTFS/exFAT support. Never runs by default. | — |
 
@@ -71,7 +71,7 @@ packages/<tier>/       # what to install — one file per package manager
 
 lib/                   # install.sh modules, one per concern
   common.sh apt.sh brew.sh snap.sh node.sh
-  sdk.sh apps.sh shell.sh desktop.sh skills.sh stow.sh
+  apps.sh shell.sh desktop.sh skills.sh stow.sh tuning.sh pick.sh private.sh
 
 bin/snapshot.sh        # re-read the live system, report what drifted
 dconf/                 # GNOME settings dumps, one file per dconf path

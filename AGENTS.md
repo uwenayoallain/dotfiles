@@ -17,8 +17,7 @@ lib/                   One module per concern, sourced by install.sh
   apt.sh               Third-party repos + apt packages
   brew.sh              Linuxbrew + formulae + fzf key bindings
   snap.sh              Snap and Flatpak
-  node.sh              NVM, Node LTS, npm/pnpm/bun globals
-  sdk.sh               Vite+ toolchain
+  node.sh              Vite+ (Node versions), pnpm, bun, global packages
   apps.sh              DuckDB, Claude Code, Antigravity CLI, Ollama, miniserve, AppImageLauncher
   shell.sh             Oh My Bash, TPM, fonts, GNOME Terminal theme
   desktop.sh           dconf dump/load, VS Code extensions
@@ -63,7 +62,7 @@ or `:Lazy sync` for plugin changes.
    the script. End such functions with an explicit `return 0` — see
    `tier_manifests` in `lib/common.sh`.
 2. **Installers that append to `~/.bashrc`.** Once stowed, `~/.bashrc` is a
-   symlink into this repo, so nvm/bun/Oh My Bash/Vite+ would edit a tracked
+   symlink into this repo, so bun/Oh My Bash/Vite+ would edit a tracked
    file. Wrap those calls in `shielded` (`lib/common.sh`), never plain `run`.
 3. **`run` vs direct calls.** Anything that mutates the system goes through
    `run` so `--dry-run` stays honest. Read-only probes call directly.

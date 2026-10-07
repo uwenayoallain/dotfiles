@@ -7,7 +7,6 @@ from the vendor page after the automated install finishes.
 
 | App | Where it came from | Notes |
 | --- | --- | --- |
-| OpenCode desktop (`opencode`, `open-code` debs, `/opt/OpenCode`) | <https://opencode.ai> | The `opencode` **CLI** is installed automatically via bun; only the desktop build is manual. The `.desktop` launcher override is already stowed from `applications/`. |
 | Zen Browser (`/opt/zen`) | <https://zen-browser.app/download/> | Tarball extracted to `/opt/zen`; the `.desktop` entry is stowed from `applications/`. |
 | Waterfox | <https://www.waterfox.net/download/> | |
 | Recordly AppImage | vendor download | Lives in `~/Applications`; AppImageLauncher registers it. |

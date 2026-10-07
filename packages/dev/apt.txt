@@ -14,8 +14,6 @@ openjdk-21-jdk
 ngrok
 ninja-build
 nmap
-podman
-podman-compose
 shellcheck
 shfmt
 tailscale
