@@ -51,8 +51,38 @@ install_cursor_agent() {
         || print_warning "Cursor Agent install failed, continuing"
 }
 
+install_ollama() {
+    if command_exists ollama; then
+        print_info "Ollama is already installed"
+        return 0
+    fi
+    print_info "Installing Ollama..."
+    run bash -c "curl -fsSL https://ollama.com/install.sh | sh" \
+        || print_warning "Ollama install failed, continuing"
+}
+
+install_balena_etcher() {
+    if command_exists balena-etcher || dpkg -s balena-etcher &> /dev/null; then
+        print_info "balenaEtcher is already installed"
+        return 0
+    fi
+    print_info "Installing balenaEtcher..."
+    if [ "$DRY_RUN" = true ]; then
+        print_dry "download and apt install the latest balenaEtcher .deb"
+        return 0
+    fi
+    local url tmp
+    url=$(curl -fsSL https://api.github.com/repos/balena-io/etcher/releases/latest \
+        | grep -oE '"browser_download_url": *"[^"]+amd64\.deb"' | head -1 | cut -d'"' -f4)
+    [ -n "$url" ] || { print_warning "Could not find a balenaEtcher .deb, continuing"; return 0; }
+    tmp=$(mktemp --suffix=.deb)
+    curl -fsSL -o "$tmp" "$url" && sudo apt-get install -y "$tmp" \
+        || print_warning "balenaEtcher install failed, continuing"
+    rm -f "$tmp"
+}
+
 install_miniserve() {
-    # miniserve backs the `serve` / `serve-media` scripts in localbin/.
+    # miniserve: a single-binary static file server (`miniserve <dir>`).
     if [ -x "$HOME/.local/bin/miniserve" ]; then
         print_info "miniserve is already installed"
         return 0
@@ -72,7 +102,7 @@ install_appimagelauncher() {
 
     print_info "Installing AppImageLauncher..."
     if [ "$DRY_RUN" = true ]; then
-        echo -e "${YELLOW}[dry-run]${NC} download and dpkg -i the latest AppImageLauncher release"
+        print_dry "download and dpkg -i the latest AppImageLauncher release"
         return 0
     fi
 
@@ -99,5 +129,7 @@ install_apps() {
     install_cursor_agent
     install_miniserve
     install_appimagelauncher
+    install_ollama
+    if tier_active desktop; then install_balena_etcher; fi
     print_success "Standalone applications installed"
 }

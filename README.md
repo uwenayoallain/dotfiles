@@ -12,8 +12,13 @@ cd ~/dotfiles
 ./install.sh
 ```
 
-That single command installs every tier except `optional`, then symlinks the
-configs. It is idempotent — re-run it any time.
+That single command installs every tier except `optional`, symlinks the
+configs, tunes the machine to its own hardware, and applies the personal
+overlay if one is reachable. It is idempotent — re-run it any time.
+
+Prefer to choose? `./install.sh --pick` walks through checklists for tiers,
+install steps, individual apps, and (with the overlay) projects and services.
+
 
 If you cloned without `--recurse-submodules`:
 
@@ -31,6 +36,8 @@ git submodule update --init --recursive
 ./install.sh --dry-run          # print every action, change nothing
 ./install.sh --list             # show tiers, package counts, and modules
 ./install.sh --no-stow          # install tools without touching symlinks
+./install.sh --pick             # choose tiers, steps, and apps interactively
+./install.sh --only tuning      # re-size every resource cap for this machine
 
 ./setup.sh                      # symlinks only, with backups
 ./setup.sh --unstow             # remove the symlinks
@@ -44,7 +51,7 @@ git submodule update --init --recursive
 | Tier | What it covers | Modules it enables |
 | --- | --- | --- |
 | `core` | Shell, build tools, and the CLI utilities `.bashrc` depends on. Safe on a server. | `apt` `brew` `shell` `stow` |
-| `dev` | Docker, podman, Node/Flutter/Java, AI CLIs, VS Code, agent skills. | `node` `sdk` `apps` `vscode` `skills` |
+| `dev` | Docker, podman, Node/Java, AI CLIs, VS Code, agent skills. | `node` `sdk` `apps` `vscode` `skills` |
 | `desktop` | Browsers, GUI apps, snaps, flatpaks, fonts, GNOME theme and settings. | `snap` `flatpak` `gnome` |
 | `optional` | Host-specific: NVIDIA driver, ZFS, NTFS/exFAT support. Never runs by default. | — |
 
@@ -77,14 +84,52 @@ Everything else is a stow package whose directory mirrors its target path:
 | `bashrc` | `$HOME` | `.bashrc`, `.bash_profile`, `.profile`, `.inputrc`, `.tmux.conf` |
 | `gitconfig` | `$HOME` | `.gitconfig` |
 | `ssh` | `$HOME` | `.ssh/config` |
-| `localbin` | `$HOME` | `.local/bin` scripts: `serve`, `serve-media`, `fix-pc-sleep` |
-| `agents` | `$HOME` | Claude, Codex, and Gemini config files |
+| `localbin` | `$HOME` | `.local/bin` scripts: `pc-freeze-guard`, `pc-background-gate`, `fix-pc-sleep` |
+| `agents` | `$HOME` | Claude and Gemini config files |
 | `skills` | `$HOME` | `.agents/skills` — the shared skill store |
 | `nvim` `tmux` `starship` `wezterm` | `$HOME/.config` | editor, multiplexer, prompt, terminal |
 | `vscode` | `$HOME/.config` | `Code/User` settings, keybindings, snippets, MCP |
 | `opencode` | `$HOME/.config` | `opencode.jsonc` |
-| `systemd` | `$HOME/.config` | user services (`media-server`, `t3code`, `appimagelauncherd`) |
-| `applications` | `$HOME/.local/share` | `.desktop` overrides and media-server assets |
+| `systemd` | `$HOME/.config` | `background.slice` and the freeze-guard timer |
+| `applications` | `$HOME/.local/share` | `.desktop` overrides |
+
+## Resource tuning
+
+`./install.sh --only tuning` sizes every limit from the machine it runs on —
+nothing is a fixed number, so the same repo is right on a small laptop and a
+big workstation. Re-run it after moving to new hardware.
+
+| What | Limit |
+| --- | --- |
+| ZFS ARC (when ZFS is loaded) | 6–20% of RAM, via `tmpfiles.d` (never `modprobe.d`/initramfs) |
+| zram swap | half of RAM, at most 8 GiB, zstd |
+| All Docker containers (`containers.slice`) | reclaim at 50% of RAM, hard cap 65%, 75% of the cores |
+| Batch jobs (`background.slice`) | reclaim at 25% of RAM, hard cap 35%, half the cores, idle CPU priority |
+| Ollama | unload after 5 idle minutes, one model, cap 60% of RAM |
+| Power | `performance` profile at boot; PL1 cap only on listed laptop models |
+
+A user unit joins the batch pool with `Slice=background.slice`.
+`pc-freeze-guard` runs every minute: on high swap it restarts idle desktop
+utilities that sit on swap, and under sustained memory pressure it pauses,
+then kills, the jobs listed in `~/.config/pc-guard/background.patterns`.
+`pc-background-gate <cmd>` starts a command only once the desktop has been
+idle for a while and stops it when you come back.
+
+## Personal overlay
+
+Anything personal — your services, scripts for your data, project lists,
+work aliases, git identity — belongs in a separate private repo with its own
+`install.sh`, by default `~/dotfiles-private` cloned from
+`<your-github>/dotfiles-private`. `install.sh` runs it last. Override with
+`DOTFILES_PRIVATE_DIR` / `DOTFILES_PRIVATE_REPO`. This repo only provides
+the hooks: `~/.bashrc.d/*.sh` is sourced by `.bashrc`, and `~/.gitconfig.local`
+is included by `.gitconfig`.
+
+## Look and feel
+
+Installer output goes through cli-kit (a gum + Catppuccin shell UI library),
+cloned to `~/projects/personal/cli-kit` on first run (`CLI_KIT_REPO` to
+override). Without it, the same output is printed plainly.
 
 ## Agent skills
 
@@ -124,18 +169,16 @@ These cannot be scripted:
    `gemini`, `opencode`, `cursor-agent`, and `coderabbit`.
 4. `gh extension install github/gh-copilot` — enables the `ghcs` / `ghce`
    shell helpers defined in `.bashrc`.
-5. `flutter doctor` to finish the Android/Flutter toolchain, and extract
-   Android Studio to `/opt/android-studio` if you want the IDE.
-6. Inside tmux, `prefix + I` to install plugins (the installer does this too).
-7. Security wordlists — `.bashrc` points `$SECURITY_TOOLS_DIR` at `~/security`,
+5. Inside tmux, `prefix + I` to install plugins (the installer does this too).
+6. Security wordlists — `.bashrc` points `$SECURITY_TOOLS_DIR` at `~/security`,
    which is not created automatically:
    ```bash
    mkdir -p ~/security && git clone --depth 1 \
      https://github.com/danielmiessler/SecLists.git ~/security/SecLists
    ```
-8. Review `packages/desktop/manual.md` for the apps that need a hand-download
+7. Review `packages/desktop/manual.md` for the apps that need a hand-download
    (RStudio, Zen, Waterfox, the AppImages) and the licences to re-enter.
-9. Laptop sleep on NVIDIA hardware: `sudo ~/.local/bin/fix-pc-sleep`.
+8. Laptop sleep on NVIDIA hardware: `sudo ~/.local/bin/fix-pc-sleep`.
 
 ## Secrets
 

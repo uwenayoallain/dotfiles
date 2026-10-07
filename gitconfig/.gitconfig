@@ -1,6 +1,7 @@
-[user]
-	name = Your Name
-	email = you@example.com
+# Identity (name, email, signing key) comes from ~/.gitconfig.local, which is
+# not part of this repo; git silently skips the include if it is missing.
+[include]
+	path = ~/.gitconfig.local
 [init]
 	defaultBranch = main
 [core]

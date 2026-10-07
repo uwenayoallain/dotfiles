@@ -28,3 +28,8 @@ whois
 xclip
 xz-utils
 zip
+
+# Compressed RAM swap; sized by lib/tuning.sh
+systemd-zram-generator
+p7zip-full
+sshpass

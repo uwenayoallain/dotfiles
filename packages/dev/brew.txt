@@ -3,4 +3,3 @@
 ffuf
 flyctl
 gobuster
-jupyterlab

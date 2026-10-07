@@ -12,3 +12,6 @@ starship
 uv
 xh
 zoxide
+
+# Themed prompts, pickers and spinners for every script (via cli-kit)
+gum

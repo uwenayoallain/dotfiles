@@ -16,8 +16,17 @@ ninja-build
 nmap
 podman
 podman-compose
-r-base
 shellcheck
 shfmt
 tailscale
 tailscale-archive-keyring
+
+# Media and network tooling
+ffmpeg
+cloudflared
+syncthing
+python3-dev
+libffi-dev
+cifs-utils
+# Headless browser testing (Playwright/Puppeteer under xvfb)
+xvfb

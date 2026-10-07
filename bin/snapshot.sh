@@ -108,18 +108,18 @@ CONFIG_PAIRS=(
     "ssh/.ssh/config:$HOME/.ssh/config"
     "agents/.claude/settings.json:$HOME/.claude/settings.json"
     "agents/.claude/CLAUDE.md:$HOME/.claude/CLAUDE.md"
-    "agents/.codex/config.toml:$HOME/.codex/config.toml"
     "agents/.gemini/settings.json:$HOME/.gemini/settings.json"
     "agents/.gemini/GEMINI.md:$HOME/.gemini/GEMINI.md"
     "opencode/opencode/opencode.jsonc:$HOME/.config/opencode/opencode.jsonc"
     "vscode/Code/User/settings.json:$HOME/.config/Code/User/settings.json"
     "vscode/Code/User/keybindings.json:$HOME/.config/Code/User/keybindings.json"
     "vscode/Code/User/mcp.json:$HOME/.config/Code/User/mcp.json"
-    "localbin/.local/bin/serve:$HOME/.local/bin/serve"
-    "localbin/.local/bin/serve-media:$HOME/.local/bin/serve-media"
     "localbin/.local/bin/fix-pc-sleep:$HOME/.local/bin/fix-pc-sleep"
-    "systemd/systemd/user/media-server.service:$HOME/.config/systemd/user/media-server.service"
-    "systemd/systemd/user/t3code.service:$HOME/.config/systemd/user/t3code.service"
+    "localbin/.local/bin/pc-freeze-guard:$HOME/.local/bin/pc-freeze-guard"
+    "localbin/.local/bin/pc-background-gate:$HOME/.local/bin/pc-background-gate"
+    "systemd/systemd/user/background.slice:$HOME/.config/systemd/user/background.slice"
+    "systemd/systemd/user/pc-freeze-guard.service:$HOME/.config/systemd/user/pc-freeze-guard.service"
+    "systemd/systemd/user/pc-freeze-guard.timer:$HOME/.config/systemd/user/pc-freeze-guard.timer"
 )
 
 drifted=0

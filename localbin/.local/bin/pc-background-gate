@@ -1,0 +1,127 @@
+#!/usr/bin/env bash
+# Run a background command only while the desktop is idle, and stand it down
+# the moment the user comes back.
+#
+# Long batch jobs (scrapers, crawlers, dedupe or transcode passes) will happily
+# occupy the machine all day. nice/ionice only decide who gets a core *when*
+# there is contention -- they do nothing about the core being consumed at all,
+# about page-cache pressure, or about swap. This gate is the actual guarantee:
+# the child does not start until the machine has been quiet for a while, and it
+# is stopped if the keyboard comes back.
+#
+# Idle is logind's IdleHint (no input for logind's idle timeout), with the
+# 1-minute load average as a fallback when logind has no session to ask. That
+# fallback is relative: busy means load >= 20% of the cores.
+#
+# Env:
+#   PC_GATE_MIN_IDLE_SEC   quiet time required before the child starts  (900)
+#   PC_GATE_WAIT_SEC       max time to wait for that quiet at start      (1800)
+#   PC_GATE_MAX_SEC        hard wall-clock cap on the child              (21600)
+#   PC_GATE_POLL_SEC       poll interval                                 (30)
+#   PC_GATE_STOP_ON_ACTIVE 1 = stop the child when the user returns      (1)
+#   PC_GATE_BUSY_LOAD      load1 treated as "in use" by the fallback (0.2 x cores)
+#
+# Exit: child's status, 124 if the wall-clock cap fired, 75 (EX_TEMPFAIL) if
+# it never got a quiet window.
+
+set -uo pipefail
+
+MIN_IDLE_SEC="${PC_GATE_MIN_IDLE_SEC:-900}"
+WAIT_SEC="${PC_GATE_WAIT_SEC:-1800}"
+MAX_SEC="${PC_GATE_MAX_SEC:-21600}"
+POLL_SEC="${PC_GATE_POLL_SEC:-30}"
+STOP_ON_ACTIVE="${PC_GATE_STOP_ON_ACTIVE:-1}"
+BUSY_LOAD="${PC_GATE_BUSY_LOAD:-$(awk -v n="$(nproc)" 'BEGIN {printf "%.2f", n * 0.2}')}"
+
+log() { printf '%s gate: %s\n' "$(date -Is)" "$*" >&2; }
+
+active_session() {
+    loginctl list-sessions --no-legend 2>/dev/null \
+        | awk -v u="${USER}" '$3==u {print $1}' | head -1
+}
+
+# Returns 0 when *idle* (safe to run), 1 when in use.
+is_idle() {
+    local sid hint load1
+    sid="$(active_session)"
+    if [ -n "$sid" ]; then
+        hint="$(loginctl show-session "$sid" -p IdleHint --value 2>/dev/null)"
+        case "$hint" in
+            yes) return 0 ;;
+            no)  return 1 ;;
+        esac
+    fi
+    # No logind answer: fall back to load. A box the owner is using sits well
+    # above a fifth of its cores on a 1-minute average; an idle one near 0.
+    load1="$(cut -d' ' -f1 /proc/loadavg 2>/dev/null)"
+    if [ -n "$load1" ] && awk -v l="$load1" -v b="$BUSY_LOAD" 'BEGIN{exit !(l>=b)}'; then
+        return 1
+    fi
+    return 0
+}
+
+# Block until the machine has been continuously idle for MIN_IDLE_SEC.
+# Returns 0 if that happened inside WAIT_SEC, 1 otherwise.
+wait_for_quiet() {
+    local streak=0 waited=0
+    while [ "$waited" -lt "$WAIT_SEC" ]; do
+        streak=0
+        while is_idle && [ "$streak" -lt "$MIN_IDLE_SEC" ]; do
+            streak=$((streak + POLL_SEC))
+            log "idle ${streak}s/${MIN_IDLE_SEC}s"
+            [ "$streak" -ge "$MIN_IDLE_SEC" ] && return 0
+            sleep "$POLL_SEC"
+            waited=$((waited + POLL_SEC))
+        done
+        [ "$streak" -ge "$MIN_IDLE_SEC" ] && return 0
+        waited=$((waited + POLL_SEC))
+        log "machine in use, waiting (${waited}s/${WAIT_SEC}s)"
+        sleep "$POLL_SEC"
+    done
+    return 1
+}
+
+if [ "$#" -eq 0 ]; then
+    log "no command given"
+    exit 64
+fi
+
+# --- Phase 1: do not start while anyone is at the keyboard ------------------
+if ! wait_for_quiet; then
+    log "still busy after ${WAIT_SEC}s, skipping this run (exit 75)"
+    exit 75
+fi
+
+log "quiet window obtained, starting: $*"
+
+# --- Phase 2: run it, but stand down when the user comes back ---------------
+"$@" &
+child=$!
+
+deadline=$(( $(date +%s) + MAX_SEC ))
+while kill -0 "$child" 2>/dev/null; do
+    if [ "$(date +%s)" -ge "$deadline" ]; then
+        log "wall-clock cap ${MAX_SEC}s reached, stopping child"
+        kill -TERM "$child" 2>/dev/null
+        wait "$child"
+        exit 124
+    fi
+    if [ "$STOP_ON_ACTIVE" = "1" ] && ! is_idle; then
+        log "user returned -- stopping child to give the machine back"
+        kill -TERM "$child" 2>/dev/null
+        # Give it a moment to finish the current item cleanly.
+        for _ in 1 2 3 4 5 6 7 8 9 10; do
+            kill -0 "$child" 2>/dev/null || break
+            sleep 1
+        done
+        kill -0 "$child" 2>/dev/null && kill -KILL "$child" 2>/dev/null
+        wait "$child"
+        exit 0
+    fi
+    sleep "$POLL_SEC"
+done
+
+wait "$child"
+rc=$?
+log "child exited rc=${rc}"
+exit "$rc"

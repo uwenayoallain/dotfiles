@@ -67,7 +67,11 @@ stow_dotfiles() {
     cd "$DOTFILES_DIR" || return 1
     backup_conflicts
 
-    run mkdir -p "$HOME/.config" "$HOME/.local/share" "$HOME/.local/bin"
+    # Real directories, never stow-folded symlinks: the private overlay stows
+    # into the same unit directory, and install.sh generates drop-ins there
+    # (background.slice.d) that must not land inside this repo.
+    run mkdir -p "$HOME/.config" "$HOME/.local/share" "$HOME/.local/bin" \
+        "$HOME/.config/systemd/user"
 
     print_info "Stowing to \$HOME: ${STOW_HOME_PACKAGES[*]}"
     run stow -t "$HOME" "${STOW_HOME_PACKAGES[@]}"
@@ -91,24 +95,22 @@ enable_user_services() {
 
     run systemctl --user daemon-reload
 
-    # Only services whose backing binary is present get enabled; the rest stay
-    # stowed but inert until their app is installed.
-    local service unit_dir="$HOME/.config/systemd/user"
-    for service in "$unit_dir"/*.service; do
-        [ -e "$service" ] || continue
-        local name
-        name=$(basename "$service")
-        local exec_bin
-        exec_bin=$(grep -m1 '^ExecStart=' "$service" | sed 's/^ExecStart=//' | awk '{print $1}' | tr -d '"')
+    # Only this repo's own units: the unit directory also holds the overlay's,
+    # project-shipped ones, and vendor ones, which their owners enable. Units
+    # whose backing binary is missing stay stowed but inert.
+    local unit name exec_bin
+    for unit in "$DOTFILES_DIR"/systemd/systemd/user/*.service "$DOTFILES_DIR"/systemd/systemd/user/*.timer; do
+        [ -e "$unit" ] || continue
+        name=$(basename "$unit")
+        exec_bin=$(grep -m1 '^ExecStart=' "$unit" | sed 's/^ExecStart=//' | awk '{print $1}' | tr -d '"' || true)
+        exec_bin=${exec_bin//%h/$HOME}
         if [ -n "$exec_bin" ] && [ ! -x "$exec_bin" ]; then
             print_warning "$name: $exec_bin is missing, leaving it disabled"
             continue
         fi
-        if grep -q '^\[Install\]' "$service"; then
+        if grep -q '^\[Install\]' "$unit"; then
             run systemctl --user enable "$name" \
                 || print_warning "Could not enable $name, continuing"
-        else
-            print_info "$name has no [Install] section, start it manually"
         fi
     done
 

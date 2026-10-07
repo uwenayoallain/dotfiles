@@ -7,14 +7,11 @@ from the vendor page after the automated install finishes.
 
 | App | Where it came from | Notes |
 | --- | --- | --- |
-| RStudio Desktop | <https://posit.co/download/rstudio-desktop/> | Needs `r-base`, which the `dev` tier installs. |
 | OpenCode desktop (`opencode`, `open-code` debs, `/opt/OpenCode`) | <https://opencode.ai> | The `opencode` **CLI** is installed automatically via bun; only the desktop build is manual. The `.desktop` launcher override is already stowed from `applications/`. |
 | Zen Browser (`/opt/zen`) | <https://zen-browser.app/download/> | Tarball extracted to `/opt/zen`; the `.desktop` entry is stowed from `applications/`. |
 | Waterfox | <https://www.waterfox.net/download/> | |
-| Android Studio (`/opt/android-studio`) | <https://developer.android.com/studio> | `install.sh --only sdk` installs this automatically; listed here only for reference. |
 | Recordly AppImage | vendor download | Lives in `~/Applications`; AppImageLauncher registers it. |
 | Terax AppImage | vendor download | Lives in `~/Applications`. |
-| T3 Code AppImage | <https://t3.chat> | Lives in `~/Applications`; the `t3code.service` user unit is stowed from `systemd/`. |
 | ScreenRec | <https://screenrec.com> | Repo is present in `sources.list.d` on the old machine but no package is currently installed. |
 
 ## Not tracked on purpose

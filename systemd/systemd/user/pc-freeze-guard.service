@@ -1,0 +1,9 @@
+# Desktop safety net: reclaims swap and stands background jobs down under
+# memory pressure. See ~/.local/bin/pc-freeze-guard for the policy; every
+# threshold is a percentage, so nothing here is hardware-specific.
+[Unit]
+Description=Desktop freeze guard (reclaim swap, pause background jobs)
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/pc-freeze-guard

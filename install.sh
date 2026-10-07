@@ -12,14 +12,33 @@
 #   ./install.sh --only apt,stow          # re-run just those modules
 #   ./install.sh --dry-run                # print what would happen
 #   ./install.sh --list                   # show tiers and modules
+#   ./install.sh --pick                   # choose tiers, steps, and apps in checklists
 
 set -eo pipefail
 
 DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# cli-kit gives every screen below its look (gum + Catppuccin). Fetch it first
+# on a fresh machine; if that fails the installer runs with plain output.
+CLI_KIT_HOME="$HOME/projects/personal/cli-kit"
+if [ ! -f "$CLI_KIT_HOME/ui.sh" ] && [ ! -f "$DOTFILES_DIR/cli-kit/ui.sh" ] && command -v git > /dev/null; then
+    owner=$(git -C "$DOTFILES_DIR" remote get-url origin 2>/dev/null \
+        | sed -E 's#^(git@github\.com:|https://github\.com/)([^/]+)/.*#\2#')
+    # Private repo: gh's credentials first, then SSH, then anonymous HTTPS.
+    if [ -n "${CLI_KIT_REPO:-}" ]; then
+        git clone --quiet --depth 1 "$CLI_KIT_REPO" "$CLI_KIT_HOME" 2>/dev/null || true
+    elif command -v gh > /dev/null && gh auth status > /dev/null 2>&1; then
+        gh repo clone "$owner/cli-kit" "$CLI_KIT_HOME" -- --quiet --depth 1 2>/dev/null || true
+    fi
+    [ -f "$CLI_KIT_HOME/ui.sh" ] || git clone --quiet --depth 1 "git@github.com:$owner/cli-kit.git" "$CLI_KIT_HOME" 2>/dev/null \
+        || git clone --quiet --depth 1 "https://github.com/$owner/cli-kit.git" "$CLI_KIT_HOME" 2>/dev/null || true
+    [ -x "$CLI_KIT_HOME/install-gum" ] && [ -t 1 ] && "$CLI_KIT_HOME/install-gum" 2>/dev/null \
+        && export PATH="$HOME/.local/bin:$PATH"
+fi
+
 # shellcheck source=lib/common.sh
 . "$DOTFILES_DIR/lib/common.sh"
-for module in apt brew snap node sdk apps shell desktop skills stow; do
+for module in apt brew snap node sdk apps shell desktop skills stow tuning private pick; do
     # shellcheck disable=SC1090
     . "$DOTFILES_DIR/lib/$module.sh"
 done
@@ -29,6 +48,7 @@ DEFAULT_TIERS=(core dev desktop)
 ACTIVE_TIERS=("${DEFAULT_TIERS[@]}")
 ONLY_MODULES=()
 SKIP_STOW=false
+PICK=false
 
 MODULES=(
     "apt:Third-party apt repositories and apt packages"
@@ -36,20 +56,22 @@ MODULES=(
     "snap:Snap packages"
     "flatpak:Flatpak applications"
     "node:NVM, Node LTS, npm/pnpm/bun globals"
-    "sdk:Flutter, Android Studio, Vite+"
+    "sdk:Vite+ toolchain"
     "apps:DuckDB, AI CLIs, miniserve, AppImageLauncher"
     "shell:Oh My Bash, TPM, fonts, terminal theme"
     "vscode:VS Code extensions"
     "gnome:GNOME dconf settings"
+    "tuning:Memory, swap, ZFS, Docker and power limits sized to this machine"
     "stow:Symlink the dotfiles and enable user services"
     "skills:Agent skill store fan-out and Claude Code plugins"
+    "private:Personal overlay: your services, scripts, and project repos"
 )
 
 # The tier a module belongs to. Modules listed here are skipped unless that
 # tier is active, so `--tier core` produces a genuinely headless install.
 # Anything not listed (apt, brew, shell, stow) runs in every tier.
 # Modules that run something under sudo. Everything else works unprivileged.
-ROOT_MODULES=(apt brew snap flatpak sdk apps shell)
+ROOT_MODULES=(apt brew snap flatpak sdk apps shell tuning)
 
 declare -A MODULE_TIER=(
     [snap]=desktop
@@ -70,6 +92,7 @@ Options:
   --tier <list>    Comma-separated tiers to install (default: ${DEFAULT_TIERS[*]})
                    Available: ${ALL_TIERS[*]}
   --only <list>    Comma-separated modules to run (default: all)
+  --pick           Choose tiers, install steps, and individual apps interactively
   --no-stow        Install tools only, do not symlink the dotfiles
   --dry-run        Print the actions instead of performing them
   --list           List the available tiers and modules, then exit
@@ -111,6 +134,7 @@ parse_args() {
                 shift 2
                 ;;
             --no-stow) SKIP_STOW=true; shift ;;
+            --pick) PICK=true; shift ;;
             --dry-run) DRY_RUN=true; shift ;;
             --list) list_targets; exit 0 ;;
             -h|--help) usage; exit 0 ;;
@@ -134,15 +158,33 @@ parse_args() {
 
 main() {
     parse_args "$@"
+    if [ "$PICK" = true ]; then run_picker; fi
 
-    echo ""
-    echo "========================================"
-    echo "   Workstation Bootstrap"
-    echo "========================================"
-    print_info "Tiers:   ${ACTIVE_TIERS[*]}"
-    print_info "Modules: ${ONLY_MODULES[*]:-all}"
-    [ "$DRY_RUN" = true ] && print_warning "Dry run — nothing will be changed"
-    echo ""
+    local started
+    started=$(date +%s)
+
+    # Section headers each module prints, so steps can be numbered "[n/total]".
+    local -A module_steps=(
+        [apt]=2 [brew]=1 [snap]=1 [flatpak]=1 [node]=1 [sdk]=1 [apps]=1
+        [shell]=1 [vscode]=1 [gnome]=1 [tuning]=2 [stow]=2 [skills]=2 [private]=1
+    )
+    local entry name enabled=()
+    STEP_TOTAL=0
+    for entry in "${MODULES[@]}"; do
+        name=${entry%%:*}
+        module_enabled "$name" || continue
+        [ "$name" = stow ] && [ "$SKIP_STOW" = true ] && continue
+        enabled+=("$name")
+        STEP_TOTAL=$(( STEP_TOTAL + ${module_steps[$name]:-1} ))
+    done
+
+    local mode="install"
+    [ "$DRY_RUN" = true ] && mode="dry run (nothing will be changed)"
+    print_banner "Workstation bootstrap" "$(hostname) · $(nproc) CPUs · $(( ($(awk '/^MemTotal:/ {print $2}' /proc/meminfo) + 524288) / 1048576 )) GB RAM" \
+        "Mode" "$mode" \
+        "Tiers" "${ACTIVE_TIERS[*]}" \
+        "Steps" "${enabled[*]:-none}" \
+        "Skipping" "${EXCLUDED_PACKAGES[*]:-nothing}"
 
     # Only ask for a password when a module that actually needs root will run,
     # so `--only skills` or `--only stow` stay password-free.
@@ -176,22 +218,27 @@ main() {
     if module_enabled shell; then install_shell_env; fi
     if module_enabled vscode; then install_vscode_extensions; fi
     if module_enabled gnome; then load_dconf; fi
+    if module_enabled tuning; then install_tuning; fi
 
     if module_enabled stow && [ "$SKIP_STOW" = false ]; then
         stow_dotfiles
         enable_user_services
         install_tmux_plugins
     fi
+    # After stow: the user half needs background.slice and the guard units.
+    if module_enabled tuning; then install_user_tuning; fi
 
     # Runs after stow so the skill store at ~/.agents/skills already exists.
     if module_enabled skills; then install_agent_skills; fi
 
+    # Last, so the overlay can rely on everything above being in place.
+    if module_enabled private; then install_private_overlay; fi
+
     stop_sudo_keepalive
 
+    print_summary "$started"
     echo ""
-    print_success "Installation complete"
-    echo ""
-    print_info "Manual steps that cannot be scripted:"
+    echo -e "${BOLD}Manual steps that cannot be scripted:${NC}"
     cat <<'EOF'
   1. source ~/.bashrc  (or open a new terminal)
   2. Set "GeistMono Nerd Font" as the terminal font
@@ -201,9 +248,8 @@ main() {
                     ngrok config add-authtoken <token>
                     sudo tailscale up
                     claude / codex / gemini / opencode / cursor-agent  (each has its own login)
-  6. flutter doctor          — finish the Android/Flutter toolchain
-  7. gh extension install github/gh-copilot   — enables the ghcs/ghce shell helpers
-  8. Review packages/desktop/manual.md for apps that need a hand-download
+  6. gh extension install github/gh-copilot   — enables the ghcs/ghce shell helpers
+  7. Review packages/desktop/manual.md for apps that need a hand-download
 EOF
     echo ""
 }

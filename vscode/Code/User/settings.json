@@ -248,7 +248,6 @@
   "chat.tools.terminal.autoApprove": {
     "npm install": true,
   },
-  "dart.flutterSdkPath": "$HOME/flutter",
   "todo-tree.ripgrep": "/home/linuxbrew/.linuxbrew/bin/rg",
   "chat.viewSessions.orientation": "stacked",
   "workbench.statusBar.visible": false,

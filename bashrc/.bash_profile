@@ -1,7 +1,5 @@
 # Login shell entry point. Everything interactive lives in ~/.bashrc.
 
-[ -d "$HOME/flutter/bin" ] && export PATH="$HOME/flutter/bin:$PATH"
-
 # Antigravity CLI
 export PATH="$HOME/.local/bin:$PATH"
 

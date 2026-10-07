@@ -1,0 +1,16 @@
+# Shared home for batch jobs: scrapers, reports, backups, transcodes.
+#
+# A unit joins with `Slice=background.slice`. Limits are fractions of this
+# machine, so the same file is right on any hardware:
+#   MemoryHigh 25% of RAM: the kernel starts reclaiming from these jobs first.
+#   MemoryMax  35% of RAM: hard ceiling for all of them together.
+#   CPUWeight  idle: they only get CPU nobody interactive wants.
+# The CPU quota (half the cores) depends on the core count, so install.sh
+# generates it in background.slice.d/50-host.conf.
+[Unit]
+Description=Background batch jobs, capped as a share of the machine
+
+[Slice]
+MemoryHigh=25%
+MemoryMax=35%
+CPUWeight=idle

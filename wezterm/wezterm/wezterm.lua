@@ -6,7 +6,6 @@ return {
 	enable_tab_bar = false,
 	font_size = 16.0,
 	font = wezterm.font('JetBrains Mono'),
-	-- window_background_image = '~/Pictures/3840x1080-Wallpaper-041.jpg',
 	-- window_background_image_hsb = {
 	-- 	brightness = 0.01,
 	-- 	hue = 1.0,

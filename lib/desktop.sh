@@ -47,7 +47,7 @@ load_dconf() {
         [ -f "$file" ] || continue
         print_info "Loading $path"
         if [ "$DRY_RUN" = true ]; then
-            echo -e "${YELLOW}[dry-run]${NC} dconf load $path < $file"
+            print_dry "dconf load $path < $file"
         else
             dconf load "$path" < "$file" || print_warning "Failed to load $path, continuing"
         fi

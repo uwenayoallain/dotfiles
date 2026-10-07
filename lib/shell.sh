@@ -60,7 +60,7 @@ install_gnome_terminal_theme() {
 
     print_info "Installing Catppuccin theme for GNOME Terminal..."
     if [ "$DRY_RUN" = true ]; then
-        echo -e "${YELLOW}[dry-run]${NC} clone catppuccin/gnome-terminal and run install.py"
+        print_dry "clone catppuccin/gnome-terminal and run install.py"
         return 0
     fi
     local tmp_dir

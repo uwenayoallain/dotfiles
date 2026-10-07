@@ -116,8 +116,6 @@ export FZF_DEFAULT_COMMAND='fd --type f --hidden --follow'
 
 # PATH
 export PATH="$HOME/.local/bin:$PNPM_HOME:$PNPM_HOME/bin:$BUN_INSTALL/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$HOME/.vimpkg/bin:${GOPATH}/bin:$HOME/.cargo/bin:/home/linuxbrew/.linuxbrew/bin:$PATH"
-[ -d "$HOME/flutter/bin" ] && export PATH="$HOME/flutter/bin:$PATH"
-[ -d /opt/android-studio/bin ] && export PATH="$PATH:/opt/android-studio/bin"
 
 # ============================================
 # Aliases
@@ -791,28 +789,20 @@ if command -v uv &> /dev/null; then
     eval "$(uv generate-shell-completion bash)"
 fi
 
+# Machine- or person-specific additions (aliases for particular projects,
+# work shortcuts) live outside this public repo, one file per topic.
+if [ -d "$HOME/.bashrc.d" ]; then
+    for rc in "$HOME"/.bashrc.d/*.sh; do
+        [ -r "$rc" ] && . "$rc"
+    done
+    unset rc
+fi
+
 # Initialize starship prompt (should be at the end)
 if command -v starship &> /dev/null; then
     eval "$(starship init bash)"
 fi
 
-work_compose_file="$HOME/projects/work/work-project/docker-compose.common.yml"
-if [ -f "$work_compose_file" ]; then
-    alias d="docker compose -f $work_compose_file"
-    alias dr='d up -d --remove-orphans --no-build'
-    alias drb='d up -d --remove-orphans --build'
-    alias drf='d down --remove-orphans && d build && d up -d --remove-orphans'
-fi
-unset work_compose_file
-
-work_v2_dir="$HOME/projects/work/work-project-v2"
-work_v2_compose_file="$work_v2_dir/infrastructure/docker/docker-compose.dev.yml"
-work_v2_env_file="$work_v2_dir/infrastructure/docker/.env"
-if [ -f "$work_v2_compose_file" ]; then
-    alias ov2="docker compose --env-file $work_v2_env_file -f $work_v2_compose_file"
-    alias ov2up='ov2 up -d --build'
-fi
-unset work_v2_dir work_v2_compose_file work_v2_env_file
 
 # Antigravity CLI
 export PATH="$HOME/.local/bin:$PATH"
@@ -820,3 +810,6 @@ export PATH="$HOME/.local/bin:$PATH"
 # Vite+ (https://viteplus.dev) — guarded so a machine without it still gets a
 # working shell instead of an error on every prompt.
 [ -f "$HOME/.vite-plus/env" ] && . "$HOME/.vite-plus/env"
+
+# opencode
+[ -d "$HOME/.opencode/bin" ] && export PATH="$HOME/.opencode/bin:$PATH"

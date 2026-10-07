@@ -55,3 +55,4 @@ tmux/plugins/
 # Snapshot output waiting for triage — review, then move entries into the
 # right packages/<tier>/ file and delete this directory.
 packages/unsorted/
+__pycache__/

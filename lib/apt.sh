@@ -9,6 +9,15 @@ apt_codename() {
     . /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}"
 }
 
+# True when some source file already points apt at <url>, whatever it is
+# named (.list or deb822 .sources, written by us, the vendor, or by hand).
+# A second entry for the same repo with a different Signed-By makes every
+# `apt update` fail, so presence is decided by URL, not by file name.
+repo_configured() {
+    local url=${1%/}
+    grep -rqsF -- "$url" /etc/apt/sources.list /etc/apt/sources.list.d/
+}
+
 # add_repo <name> <key-url> <source-line>
 # Downloads and dearmors the signing key, then writes the source list.
 # Skips entirely when the source file already exists.
@@ -17,16 +26,18 @@ add_repo() {
     local keyring="$KEYRINGS_DIR/$name.gpg"
     local list="$SOURCES_DIR/$name.list"
 
-    if [ -f "$list" ]; then
-        print_info "apt repo '$name' is already configured"
+    local url
+    url=$(grep -oE 'https?://[^ ]+' <<< "$source_line" | head -1)
+    if [ -f "$list" ] || repo_configured "$url"; then
+        print_success "apt repo '$name' is configured"
         return 0
     fi
 
     print_info "Adding apt repo '$name'..."
     run sudo install -m 0755 -d "$KEYRINGS_DIR"
     if [ "$DRY_RUN" = true ]; then
-        echo -e "${YELLOW}[dry-run]${NC} curl $key_url | gpg --dearmor > $keyring"
-        echo -e "${YELLOW}[dry-run]${NC} echo '$source_line' > $list"
+        print_dry "curl $key_url | gpg --dearmor > $keyring"
+        print_dry "echo '$source_line' > $list"
         return 0
     fi
 
@@ -38,6 +49,43 @@ add_repo() {
     sudo chmod a+r "$keyring"
     echo "$source_line" | sudo tee "$list" > /dev/null
     APT_NEEDS_UPDATE=true
+}
+
+# add_vendor_repo <name> <key> <keyring-path> <sources-file> <sources-content>
+# For vendors whose own package (re)writes its repo file on install: Chrome,
+# ChatGPT, Helium. The keyring and deb822 file are written at exactly the
+# paths and with the same Signed-By the vendor uses, so the package updates
+# them in place. A second copy elsewhere with a different Signed-By would make
+# every `apt update` fail.
+# <key> is a URL, or a file name under packages/keyrings/ for vendors that
+# publish no fetchable key.
+add_vendor_repo() {
+    local name=$1 key=$2 keyring=$3 sources=$4 content=$5
+    local url
+    url=$(grep -oE 'https?://[^ ]+' <<< "$content" | head -1)
+    if [ -f "$sources" ] || repo_configured "$url"; then
+        print_success "apt repo '$name' is configured"
+        return 0
+    fi
+
+    print_info "Adding apt repo '$name'..."
+    if [ "$DRY_RUN" = true ]; then
+        print_dry "install key $key -> $keyring; write $sources"
+        return 0
+    fi
+    case "$key" in
+        http*) curl -fsSL "$key" ;;
+        *) cat "$PACKAGES_DIR/keyrings/$key" ;;
+    esac | sudo gpg --dearmor --yes -o "$keyring" \
+        || { print_warning "Could not install the key for '$name', skipping"; sudo rm -f "$keyring"; return 0; }
+    sudo chmod a+r "$keyring"
+    printf '%s\n' "$content" | sudo tee "$sources" > /dev/null
+    APT_NEEDS_UPDATE=true
+}
+
+# deb822 body for a single-suite amd64 repo.
+deb822() {
+    printf 'X-Repolib-Name: %s\nTypes: deb\nURIs: %s\nSuites: %s\nComponents: main\nArchitectures: amd64\nSigned-By: %s' "$1" "$2" "$3" "$4"
 }
 
 install_apt_repos() {
@@ -53,13 +101,13 @@ install_apt_repos() {
         "https://download.docker.com/linux/ubuntu/gpg" \
         "deb [arch=$arch signed-by=$KEYRINGS_DIR/docker.gpg] https://download.docker.com/linux/ubuntu $codename stable"
 
-    add_repo google-chrome \
-        "https://dl.google.com/linux/linux_signing_key.pub" \
-        "deb [arch=amd64 signed-by=$KEYRINGS_DIR/google-chrome.gpg] https://dl.google.com/linux/chrome/deb/ stable main"
+    add_vendor_repo google-chrome "https://dl.google.com/linux/linux_signing_key.pub" \
+        /usr/share/keyrings/google-chrome.gpg "$SOURCES_DIR/google-chrome.sources" \
+        "$(deb822 "Google Chrome" https://dl.google.com/linux/chrome-stable/deb/ stable /usr/share/keyrings/google-chrome.gpg)"
 
-    add_repo google-chrome-beta \
-        "https://dl.google.com/linux/linux_signing_key.pub" \
-        "deb [arch=amd64 signed-by=$KEYRINGS_DIR/google-chrome-beta.gpg] https://dl.google.com/linux/chrome-beta/deb/ stable main"
+    add_vendor_repo google-chrome-beta "https://dl.google.com/linux/linux_signing_key.pub" \
+        /usr/share/keyrings/google-chrome-beta.gpg "$SOURCES_DIR/google-chrome-beta.sources" \
+        "$(deb822 "Google Chrome (beta)" https://dl.google.com/linux/chrome-beta/deb/ stable /usr/share/keyrings/google-chrome-beta.gpg)"
 
     add_repo vscode \
         "https://packages.microsoft.com/keys/microsoft.asc" \
@@ -93,9 +141,17 @@ install_apt_repos() {
         "https://keys.anydesk.com/repos/DEB-GPG-KEY" \
         "deb [arch=amd64 signed-by=$KEYRINGS_DIR/anydesk.gpg] http://deb.anydesk.com/ all main"
 
-    add_repo cran-r \
-        "https://cloud.r-project.org/bin/linux/ubuntu/marutter_pubkey.asc" \
-        "deb [signed-by=$KEYRINGS_DIR/cran-r.gpg] https://cloud.r-project.org/bin/linux/ubuntu $codename-cran40/"
+
+    add_repo cloudflared \
+        "https://pkg.cloudflare.com/cloudflare-main.gpg" \
+        "deb [signed-by=$KEYRINGS_DIR/cloudflared.gpg] https://pkg.cloudflare.com/cloudflared any main"
+
+    add_vendor_repo helium helium.asc /usr/share/keyrings/helium.gpg "$SOURCES_DIR/helium.list" \
+        "deb [signed-by=/usr/share/keyrings/helium.gpg] https://pkg.helium.computer/deb stable main"
+
+    add_vendor_repo chatgpt chatgpt-archive-keyring.asc \
+        /usr/share/keyrings/chatgpt-archive-keyring.gpg "$SOURCES_DIR/chatgpt.sources" \
+        "$(deb822 ChatGPT https://persistent.oaistatic.com/codex-app-prod/linux/deb stable /usr/share/keyrings/chatgpt-archive-keyring.gpg)"
 
     if [ "${APT_NEEDS_UPDATE:-false}" = true ]; then
         run sudo apt-get update

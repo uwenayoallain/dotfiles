@@ -4,3 +4,4 @@ brave
 firefox
 spotify
 slack-term --edge
+libreoffice

@@ -19,7 +19,7 @@ install_node() {
     fi
 
     if [ "$DRY_RUN" = true ]; then
-        echo -e "${YELLOW}[dry-run]${NC} nvm install --lts && nvm alias default 'lts/*'"
+        print_dry "nvm install --lts && nvm alias default 'lts/*'"
     else
         # shellcheck disable=SC1091
         . "$NVM_DIR/nvm.sh"

@@ -18,12 +18,15 @@ lib/                   One module per concern, sourced by install.sh
   brew.sh              Linuxbrew + formulae + fzf key bindings
   snap.sh              Snap and Flatpak
   node.sh              NVM, Node LTS, npm/pnpm/bun globals
-  sdk.sh               Flutter, Android Studio, Vite+
+  sdk.sh               Vite+ toolchain
   apps.sh              DuckDB, AI CLIs, miniserve, AppImageLauncher
   shell.sh             Oh My Bash, TPM, fonts, GNOME Terminal theme
   desktop.sh           dconf dump/load, VS Code extensions
   skills.sh            Agent skill fan-out, Claude Code plugins
   stow.sh              Package->target map, conflict backup, user services
+  tuning.sh            Resource limits sized from this host's RAM/cores
+  pick.sh              --pick checklists (gum via cli-kit, whiptail fallback)
+  private.sh           Clone and run the private overlay's install.sh
 
 packages/<tier>/       Manifests: apt, brew, snap, flatpak, npm, pnpm, bun,
                        vscode, skills.map, claude-plugins.txt, manual.md
@@ -94,6 +97,14 @@ bash -n install.sh setup.sh bin/snapshot.sh lib/*.sh
 
 Short and direct; history uses plain verbs ("updates") and conventional
 prefixes (`feat:`, `fix:`). No co-authors.
+
+## Generic only
+
+This repo is public. Nothing personal goes here: no project names or paths,
+no personal data directories, no work aliases, no identity. Those belong in
+the private overlay (`lib/private.sh`), reached through the hooks this repo
+provides (`~/.bashrc.d/*.sh`, `~/.gitconfig.local`). Resource limits are always
+fractions of the host (`lib/tuning.sh`), never fixed sizes.
 
 ## Security
 

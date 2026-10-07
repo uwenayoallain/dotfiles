@@ -32,3 +32,13 @@ windsurf
 # XnView MP is installed as a Flatpak instead of the .deb (see flatpak.txt).
 #
 # See packages/desktop/manual.md for apps that must be downloaded by hand.
+
+# Desktop apps added 2026-10
+chatgpt
+helium-bin
+# Corporate VPN (AnyConnect-compatible) from the GNOME network panel
+openconnect
+network-manager-openconnect-gnome
+# Fonts web pages and documents expect
+fonts-liberation
+fonts-noto-color-emoji
