@@ -73,15 +73,19 @@ stow_dotfiles() {
     run mkdir -p "$HOME/.config" "$HOME/.local/share" "$HOME/.local/bin" \
         "$HOME/.config/systemd/user"
 
-    print_info "Stowing to \$HOME: ${STOW_HOME_PACKAGES[*]}"
+    # Ask stow what it would do first, so an already-linked tree is one line.
+    local pending
+    pending=$( { stow -n -v -t "$HOME" "${STOW_HOME_PACKAGES[@]}"
+                 stow -n -v -t "$HOME/.config" "${STOW_CONFIG_PACKAGES[@]}"
+                 stow -n -v -t "$HOME/.local/share" "${STOW_SHARE_PACKAGES[@]}"; } 2>&1 | grep -c '^LINK' || true)
+    if [ "$pending" -eq 0 ]; then
+        print_success "All dotfiles already linked"
+        return 0
+    fi
+    print_info "Linking $pending new file(s)"
     run stow -t "$HOME" "${STOW_HOME_PACKAGES[@]}"
-
-    print_info "Stowing to ~/.config: ${STOW_CONFIG_PACKAGES[*]}"
     run stow -t "$HOME/.config" "${STOW_CONFIG_PACKAGES[@]}"
-
-    print_info "Stowing to ~/.local/share: ${STOW_SHARE_PACKAGES[*]}"
     run stow -t "$HOME/.local/share" "${STOW_SHARE_PACKAGES[@]}"
-
     print_success "Dotfiles stowed"
 }
 
@@ -93,12 +97,12 @@ enable_user_services() {
         return 0
     fi
 
-    run systemctl --user daemon-reload
+    [ "$DRY_RUN" = true ] || systemctl --user daemon-reload
 
     # Only this repo's own units: the unit directory also holds the overlay's,
     # project-shipped ones, and vendor ones, which their owners enable. Units
     # whose backing binary is missing stay stowed but inert.
-    local unit name exec_bin
+    local unit name exec_bin present=0
     for unit in "$DOTFILES_DIR"/systemd/systemd/user/*.service "$DOTFILES_DIR"/systemd/systemd/user/*.timer; do
         [ -e "$unit" ] || continue
         name=$(basename "$unit")
@@ -108,11 +112,14 @@ enable_user_services() {
             print_warning "$name: $exec_bin is missing, leaving it disabled"
             continue
         fi
-        if grep -q '^\[Install\]' "$unit"; then
-            run systemctl --user enable "$name" \
-                || print_warning "Could not enable $name, continuing"
+        grep -q '^\[Install\]' "$unit" || continue
+        if systemctl --user is-enabled "$name" &> /dev/null; then
+            present=$((present + 1))
+            continue
         fi
+        run systemctl --user enable --now "$name" \
+            || print_warning "Could not enable $name, continuing"
     done
-
-    print_success "User services processed"
+    print_present "$present" "user services enabled"
+    return 0
 }

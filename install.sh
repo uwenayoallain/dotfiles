@@ -205,7 +205,6 @@ main() {
     trap stop_sudo_keepalive EXIT
 
     if module_enabled apt; then
-        run sudo apt-get update
         install_apt_repos
         install_apt_packages
     fi

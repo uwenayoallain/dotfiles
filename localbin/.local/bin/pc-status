@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+# One screen: is this machine smooth, getting heavy, or lagging, and why.
+#
+#   pc-status            snapshot
+#   pc-status --watch    refresh every 2 s until Ctrl-C
+#
+# Uses cli-kit for the look when it is installed, plain text otherwise.
+
+set -uo pipefail
+
+. "$HOME/.local/lib/pc/gauges.sh"
+for ck in "${CK_DIR:-}" "$HOME/projects/personal/cli-kit" "$HOME/.local/share/cli-kit" "$HOME/dotfiles/cli-kit"; do
+    [ -n "$ck" ] && [ -f "$ck/ui.sh" ] && { CK_DIR=$ck; . "$ck/ui.sh"; break; }
+done
+if ! declare -F ui_step > /dev/null; then
+    CK_C_OK='' CK_C_WARN='' CK_C_ERR='' CK_C_MUTED='' CK_RESET='' CK_BOLD=''
+    ui_step() { printf '\n== %s ==\n' "$*"; }
+    ui_banner() { printf '\n%s\n%s\n' "$1" "$2"; }
+fi
+
+# bar <percent> [width]: colored by how close to full it is.
+bar() {
+    local pct=$1 width=${2:-24} filled color out=""
+    [ "$pct" -gt 100 ] && pct=100
+    filled=$(( pct * width / 100 ))
+    if [ "$pct" -ge 90 ]; then color=$CK_C_ERR
+    elif [ "$pct" -ge 75 ]; then color=$CK_C_WARN
+    else color=$CK_C_OK; fi
+    local i
+    for ((i = 0; i < width; i++)); do
+        if [ "$i" -lt "$filled" ]; then out+="━"; else out+="${CK_C_MUTED}━${color}"; fi
+    done
+    printf '%s%s%s' "$color" "$out" "$CK_RESET"
+}
+
+gb() { awk -v m="$1" 'BEGIN {printf (m >= 1024 ? "%.1f GB" : "%d MB"), (m >= 1024 ? m / 1024 : m)}'; }
+
+row() { printf '  %s%-11s%s %s  %s\n' "$CK_C_MUTED" "$1" "$CK_RESET" "$2" "$3"; }
+
+render() {
+    gauge_read
+    gauge_verdict
+
+    local verdict
+    case $GAUGE_LEVEL in
+        ok) verdict="${CK_C_OK}${CK_BOLD}● Smooth${CK_RESET}" ;;
+        warn) verdict="${CK_C_WARN}${CK_BOLD}● Getting heavy${CK_RESET}  $GAUGE_REASONS" ;;
+        crit) verdict="${CK_C_ERR}${CK_BOLD}● Lagging${CK_RESET}  $GAUGE_REASONS" ;;
+    esac
+
+    ui_banner "PC status" "$(hostname) · $CPUS CPUs · $(gb "$GAUGE_MEM_TOTAL_MB") RAM · $(date +%H:%M:%S)"
+    echo
+    printf '  %b\n' "$verdict"
+
+    ui_step "Pressure"
+    row "Memory" "$(bar "$GAUGE_MEM_USED_PCT")" "$(printf '%3d%%  %s free' "$GAUGE_MEM_USED_PCT" "$(gb "$GAUGE_MEM_AVAIL_MB")")"
+    row "Swap" "$(bar "$GAUGE_SWAP_PCT")" "$(printf '%3d%%  %s used' "$GAUGE_SWAP_PCT" "$(gb "$GAUGE_SWAP_USED_MB")")"
+    row "Stalls" "$(printf 'memory %s%%  ·  disk %s%%  ·  cpu %s%%' "$GAUGE_PSI_MEM" "$GAUGE_PSI_IO" "$GAUGE_PSI_CPU")" ""
+    row "CPU" "$(printf 'load %s on %s cores%s' "$GAUGE_LOAD1" "$CPUS" "${GAUGE_TEMP_C:+  ·  ${GAUGE_TEMP_C}°C}")" ""
+
+    ui_step "Limits"
+    local cur max
+    read -r cur max < <(slice_usage containers.slice)
+    row "Containers" "$(gb "$cur") of $([ "$max" = "∞" ] && echo "no cap" || gb "$max")" ""
+    read -r cur max < <(slice_usage background.slice --user)
+    row "Batch jobs" "$(gb "$cur") of $([ "$max" = "∞" ] && echo "no cap" || gb "$max")" ""
+
+    ui_step "Heaviest right now"
+    local mb name pct
+    while read -r mb name; do
+        row "$(gb "$mb")" "$name" ""
+    done < <(top_memory 4)
+    while read -r pct name; do
+        row "${pct}% cpu" "$name" ""
+    done < <(top_cpu 3)
+
+    local log="${XDG_RUNTIME_DIR:-/tmp}/pc-freeze-guard/guard.log"
+    if [ -s "$log" ]; then
+        ui_step "Freeze guard"
+        tail -n 3 "$log" | cut -c12-19,26- | sed "s/^/  ${CK_C_MUTED}/; s/\$/${CK_RESET}/"
+    fi
+}
+
+if [ "${1:-}" = "--watch" ]; then
+    trap 'tput cnorm; exit 0' INT TERM
+    tput civis
+    while true; do
+        frame=$(render 2>&1)
+        tput cup 0 0
+        printf '%s\n' "$frame"
+        tput ed
+        sleep 2
+    done
+else
+    render
+fi

@@ -4,7 +4,7 @@
 
 install_duckdb() {
     if command_exists duckdb; then
-        print_info "DuckDB is already installed"
+        mark_present "DuckDB"
         return 0
     fi
     print_info "Installing DuckDB..."
@@ -23,7 +23,7 @@ install_duckdb() {
 
 install_claude_code() {
     if command_exists claude; then
-        print_info "Claude Code is already installed"
+        mark_present "Claude Code"
         return 0
     fi
     print_info "Installing Claude Code..."
@@ -33,7 +33,7 @@ install_claude_code() {
 
 install_coderabbit() {
     if command_exists coderabbit; then
-        print_info "CodeRabbit CLI is already installed"
+        mark_present "CodeRabbit CLI"
         return 0
     fi
     print_info "Installing CodeRabbit CLI..."
@@ -43,7 +43,7 @@ install_coderabbit() {
 
 install_cursor_agent() {
     if command_exists cursor-agent || [ -x "$HOME/.local/bin/agent" ]; then
-        print_info "Cursor Agent is already installed"
+        mark_present "Cursor Agent"
         return 0
     fi
     print_info "Installing Cursor Agent..."
@@ -53,7 +53,7 @@ install_cursor_agent() {
 
 install_ollama() {
     if command_exists ollama; then
-        print_info "Ollama is already installed"
+        mark_present "Ollama"
         return 0
     fi
     print_info "Installing Ollama..."
@@ -63,7 +63,7 @@ install_ollama() {
 
 install_balena_etcher() {
     if command_exists balena-etcher || dpkg -s balena-etcher &> /dev/null; then
-        print_info "balenaEtcher is already installed"
+        mark_present "balenaEtcher"
         return 0
     fi
     print_info "Installing balenaEtcher..."
@@ -84,7 +84,7 @@ install_balena_etcher() {
 install_miniserve() {
     # miniserve: a single-binary static file server (`miniserve <dir>`).
     if [ -x "$HOME/.local/bin/miniserve" ]; then
-        print_info "miniserve is already installed"
+        mark_present "miniserve"
         return 0
     fi
     print_info "Installing miniserve..."
@@ -96,7 +96,7 @@ install_miniserve() {
 
 install_appimagelauncher() {
     if command_exists appimagelauncherd; then
-        print_info "AppImageLauncher is already installed"
+        mark_present "AppImageLauncher"
         return 0
     fi
 
@@ -131,5 +131,5 @@ install_apps() {
     install_appimagelauncher
     install_ollama
     if tier_active desktop; then install_balena_etcher; fi
-    print_success "Standalone applications installed"
+    flush_present "apps"
 }

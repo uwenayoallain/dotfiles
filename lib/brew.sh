@@ -15,9 +15,7 @@ load_brew() {
 install_brew() {
     print_step "Installing Homebrew"
 
-    if load_brew; then
-        print_info "Homebrew is already installed"
-    else
+    if ! load_brew; then
         shielded /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
         load_brew
         print_success "Homebrew installed"
@@ -32,23 +30,28 @@ install_brew() {
 
     # `brew install` is happy to take the whole list, but doing them one at a
     # time means a single broken formula does not lose the rest of the run.
-    local installed pkg
-    installed=$(brew list --formula 2>/dev/null || true)
+    local installed pkg present=0
+    installed=$(brew list --formula -1 2>/dev/null || true)
     for pkg in "${packages[@]}"; do
         if grep -qx "$pkg" <<< "$installed"; then
-            print_info "$pkg is already installed"
+            present=$((present + 1))
         else
             print_info "Installing $pkg..."
             run brew install "$pkg" || print_warning "brew install $pkg failed, continuing"
         fi
     done
-
-    print_success "Homebrew formulae installed"
+    print_present "$present" "Homebrew formulae"
+    return 0
 }
 
 setup_fzf() {
-    if [ -f "$BREW_PREFIX/opt/fzf/install" ]; then
-        print_info "Setting up fzf key bindings..."
-        run "$BREW_PREFIX/opt/fzf/install" --key-bindings --completion --no-update-rc --no-bash --no-zsh
-    fi
+    [ -f "$BREW_PREFIX/opt/fzf/install" ] || return 0
+    # Once per fzf version: a stamp records which one was set up.
+    local stamp="$HOME/.local/state/dotfiles/fzf-setup" version
+    version=$(readlink -f "$BREW_PREFIX/opt/fzf")
+    [ "$(cat "$stamp" 2>/dev/null)" = "$version" ] && return 0
+    print_info "Setting up fzf key bindings..."
+    run "$BREW_PREFIX/opt/fzf/install" --key-bindings --completion --no-update-rc --no-bash --no-zsh \
+        && run mkdir -p "$(dirname "$stamp")" && { [ "$DRY_RUN" = true ] || echo "$version" > "$stamp"; }
+    return 0
 }

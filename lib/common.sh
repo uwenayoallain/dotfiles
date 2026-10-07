@@ -105,6 +105,25 @@ print_summary() {
 
 command_exists() { command -v "$1" &> /dev/null; }
 
+# print_present <count> <what>: one line for everything a step found already
+# in place, so a re-run reads as a short list of what actually changed.
+print_present() {
+    [ "$1" -gt 0 ] && print_success "$1 $2 already in place"
+    return 0
+}
+
+# mark_present <name> / flush_present <what>: collect the one-off tools a step
+# found installed and report them on one line at the end of the step.
+PRESENT_ITEMS=()
+mark_present() { PRESENT_ITEMS+=("$1"); }
+flush_present() {
+    if [ ${#PRESENT_ITEMS[@]} -gt 0 ]; then
+        print_success "${#PRESENT_ITEMS[@]} $1 already in place: $(IFS=,; echo "${PRESENT_ITEMS[*]}" | sed 's/,/, /g')"
+    fi
+    PRESENT_ITEMS=()
+    return 0
+}
+
 print_dry() { echo -e "  ${DIM}[dry-run] $1${NC}"; }
 
 # Run a command, or just print it when DRY_RUN is on.

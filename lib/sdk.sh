@@ -5,7 +5,7 @@
 
 install_vite_plus() {
     if [ -d "$HOME/.vite-plus" ]; then
-        print_info "Vite+ is already installed"
+        mark_present "Vite+"
         return 0
     fi
 
@@ -17,5 +17,5 @@ install_vite_plus() {
 install_sdks() {
     print_step "Installing SDKs"
     install_vite_plus
-    print_success "SDK step complete"
+    flush_present "toolchains"
 }

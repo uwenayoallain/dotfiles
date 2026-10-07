@@ -1,0 +1,19 @@
+# Early-warning notifications before the desktop starts to lag.
+# See ~/.local/bin/pc-watch; thresholds are percentages, so nothing here is
+# hardware-specific. It reads /proc every few seconds and costs ~nothing.
+[Unit]
+Description=PC watch: warn before the desktop starts to lag
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/pc-watch
+Restart=on-failure
+RestartSec=10
+# Must keep running while the machine struggles: small, normal priority,
+# outside background.slice.
+MemoryMax=64M
+
+[Install]
+WantedBy=graphical-session.target

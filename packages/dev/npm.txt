@@ -1,5 +1,5 @@
 # Global npm packages, installed against the NVM-managed Node LTS.
 
-@google/gemini-cli
-@openai/codex
-yarn
+@google/gemini-cli   gemini
+@openai/codex        codex
+yarn                 yarn

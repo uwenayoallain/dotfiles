@@ -43,19 +43,24 @@ link_skills() {
             done
         fi
 
-        run mkdir -p "$target_dir"
-        local skill
+        [ -d "$target_dir" ] || run mkdir -p "$target_dir"
+        local skill linked=() ok=0
         for skill in $skill_list; do
             if [ ! -d "$SKILL_STORE/$skill" ] && [ "$DRY_RUN" != true ]; then
                 print_warning "Skill '$skill' is not in the store, skipping"
                 continue
             fi
+            if [ "$(readlink "$target_dir/$skill" 2>/dev/null)" = "$SKILL_STORE/$skill" ]; then
+                ok=$((ok + 1))
+                continue
+            fi
             run ln -sfn "$SKILL_STORE/$skill" "$target_dir/$skill"
+            linked+=("$skill")
         done
-        print_info "Linked ${target_dir#"$HOME"/} ->$skill_list"
+        [ ${#linked[@]} -gt 0 ] && print_info "Linked into ${target_dir#"$HOME"/}: ${linked[*]}"
+        print_present "$ok" "skills in ${target_dir#"$HOME"/}"
     done < "$map"
-
-    print_success "Agent skills linked"
+    return 0
 }
 
 install_claude_plugins() {
@@ -75,10 +80,13 @@ install_claude_plugins() {
     local entries=()
     read_manifest entries "${files[@]}"
 
-    local entry
+    local entry have_markets have_plugins present=0
+    have_markets=$(claude plugin marketplace list 2>/dev/null | sed -n 's/^ *❯ *//p')
+    have_plugins=$(claude plugin list 2>/dev/null | sed -n 's/^ *❯ *//p')
     for entry in "${entries[@]}"; do
         read -ra parts <<< "$entry"
         if [ "${parts[0]}" = "marketplace" ]; then
+            grep -qxF "${parts[1]}" <<< "$have_markets" && { present=$((present + 1)); continue; }
             print_info "Adding marketplace ${parts[1]}..."
             run claude plugin marketplace add "${parts[2]}" \
                 || print_warning "Could not add marketplace ${parts[1]}, continuing"
@@ -88,12 +96,14 @@ install_claude_plugins() {
     for entry in "${entries[@]}"; do
         read -ra parts <<< "$entry"
         [ "${parts[0]}" = "marketplace" ] && continue
+        grep -qxF "${parts[0]}" <<< "$have_plugins" && { present=$((present + 1)); continue; }
         print_info "Installing plugin ${parts[0]}..."
         run claude plugin install "${parts[0]}" \
             || print_warning "Could not install ${parts[0]}, continuing"
     done
 
-    print_success "Claude Code plugins installed"
+    print_present "$present" "Claude Code plugins and marketplaces"
+    return 0
 }
 
 install_agent_skills() {

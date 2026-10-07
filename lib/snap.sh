@@ -17,20 +17,22 @@ install_snaps() {
     local entries=()
     read_manifest entries "${files[@]}"
 
-    local entry name
+    local entry name present=0 installed
+    installed=$(snap list 2>/dev/null | awk 'NR > 1 {print $1}')
     for entry in "${entries[@]}"; do
         # Entries may carry flags, e.g. "slack-term --edge".
         read -ra parts <<< "$entry"
         name="${parts[0]}"
-        if snap list "$name" &> /dev/null; then
-            print_info "snap '$name' is already installed"
+        if grep -qx "$name" <<< "$installed"; then
+            present=$((present + 1))
         else
             print_info "Installing snap '$name'..."
             run sudo snap install "${parts[@]}" || print_warning "snap install $name failed, continuing"
         fi
     done
 
-    print_success "Snap packages installed"
+    print_present "$present" "snaps"
+    return 0
 }
 
 install_flatpaks() {
@@ -45,21 +47,23 @@ install_flatpaks() {
     tier_manifests files flatpak
     [ ${#files[@]} -eq 0 ] && return 0
 
-    run flatpak remote-add --if-not-exists --user \
-        flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+    flatpak remotes --user 2>/dev/null | grep -q '^flathub' \
+        || run flatpak remote-add --if-not-exists --user \
+            flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 
     local apps=()
     read_manifest apps "${files[@]}"
 
-    local app
+    local app present=0
     for app in "${apps[@]}"; do
-        if flatpak info --user "$app" &> /dev/null; then
-            print_info "flatpak '$app' is already installed"
+        if flatpak info --user "$app" &> /dev/null || flatpak info "$app" &> /dev/null; then
+            present=$((present + 1))
         else
             print_info "Installing flatpak '$app'..."
             run flatpak install --user -y flathub "$app" || print_warning "flatpak install $app failed, continuing"
         fi
     done
 
-    print_success "Flatpak applications installed"
+    print_present "$present" "flatpaks"
+    return 0
 }

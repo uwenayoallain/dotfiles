@@ -41,20 +41,29 @@ load_dconf() {
         return 0
     fi
 
-    local path file
+    local path file present=0 loaded_terminal=false
     for path in "${DCONF_PATHS[@]}"; do
         file=$(dconf_file_for "$path")
         [ -f "$file" ] || continue
+        # Already identical: nothing to load.
+        if [ "$(dconf dump "$path" 2>/dev/null)" = "$(cat "$file")" ]; then
+            present=$((present + 1))
+            continue
+        fi
         print_info "Loading $path"
+        [ "$path" = /org/gnome/terminal/ ] && loaded_terminal=true
         if [ "$DRY_RUN" = true ]; then
             print_dry "dconf load $path < $file"
         else
             dconf load "$path" < "$file" || print_warning "Failed to load $path, continuing"
         fi
     done
+    print_present "$present" "GNOME settings groups"
 
-    print_success "GNOME settings restored"
-    print_warning "Terminal profiles are restored by UUID — pick the Catppuccin profile as default in Preferences"
+    if [ "$loaded_terminal" = true ]; then
+        print_warning "Terminal profiles are restored by UUID — pick the Catppuccin profile as default in Preferences"
+    fi
+    return 0
 }
 
 install_vscode_extensions() {
@@ -72,10 +81,11 @@ install_vscode_extensions() {
     local extensions=()
     read_manifest extensions "${files[@]}"
 
-    local installed ext
+    local installed ext present=0
     installed=$(code --list-extensions 2>/dev/null | tr '[:upper:]' '[:lower:]')
     for ext in "${extensions[@]}"; do
         if grep -qx "$(tr '[:upper:]' '[:lower:]' <<< "$ext")" <<< "$installed"; then
+            present=$((present + 1))
             continue
         fi
         print_info "Installing extension $ext..."
@@ -83,5 +93,6 @@ install_vscode_extensions() {
             || print_warning "Could not install $ext, continuing"
     done
 
-    print_success "VS Code extensions installed"
+    print_present "$present" "VS Code extensions"
+    return 0
 }

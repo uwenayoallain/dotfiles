@@ -29,7 +29,7 @@ add_repo() {
     local url
     url=$(grep -oE 'https?://[^ ]+' <<< "$source_line" | head -1)
     if [ -f "$list" ] || repo_configured "$url"; then
-        print_success "apt repo '$name' is configured"
+        APT_REPOS_PRESENT=$(( ${APT_REPOS_PRESENT:-0} + 1 ))
         return 0
     fi
 
@@ -64,7 +64,7 @@ add_vendor_repo() {
     local url
     url=$(grep -oE 'https?://[^ ]+' <<< "$content" | head -1)
     if [ -f "$sources" ] || repo_configured "$url"; then
-        print_success "apt repo '$name' is configured"
+        APT_REPOS_PRESENT=$(( ${APT_REPOS_PRESENT:-0} + 1 ))
         return 0
     fi
 
@@ -95,7 +95,14 @@ install_apt_repos() {
     local arch
     arch=$(dpkg --print-architecture)
 
-    run sudo apt-get install -y ca-certificates curl gnupg apt-transport-https
+    local base=() pkg
+    for pkg in ca-certificates curl gnupg apt-transport-https; do
+        dpkg-query -W -f='${db:Status-Status}' "$pkg" 2>/dev/null | grep -qx installed || base+=("$pkg")
+    done
+    if [ ${#base[@]} -gt 0 ]; then
+        run sudo apt-get update
+        run sudo apt-get install -y "${base[@]}"
+    fi
 
     add_repo docker \
         "https://download.docker.com/linux/ubuntu/gpg" \
@@ -153,10 +160,11 @@ install_apt_repos() {
         /usr/share/keyrings/chatgpt-archive-keyring.gpg "$SOURCES_DIR/chatgpt.sources" \
         "$(deb822 ChatGPT https://persistent.oaistatic.com/codex-app-prod/linux/deb stable /usr/share/keyrings/chatgpt-archive-keyring.gpg)"
 
+    print_present "${APT_REPOS_PRESENT:-0}" "apt repositories"
     if [ "${APT_NEEDS_UPDATE:-false}" = true ]; then
-        run sudo apt-get update
+        run sudo apt-get update -qq
     fi
-    print_success "apt repositories configured"
+    return 0
 }
 
 install_apt_packages() {
@@ -172,9 +180,23 @@ install_apt_packages() {
     local packages=()
     read_manifest packages "${files[@]}"
 
-    # Split the list so one unavailable package cannot abort the whole install.
-    local available=() missing=() pkg
+    # Only what is not installed yet. One dpkg-query for the whole list.
+    local installed todo=() pkg
+    installed=$(dpkg-query -W -f='${binary:Package} ${db:Status-Status}\n' 2>/dev/null \
+        | awk '$2 == "installed" {sub(/:.*/, "", $1); print $1}')
     for pkg in "${packages[@]}"; do
+        grep -qxF -- "$pkg" <<< "$installed" || todo+=("$pkg")
+    done
+    print_present $(( ${#packages[@]} - ${#todo[@]} )) "apt packages"
+
+    if [ ${#todo[@]} -gt 0 ]; then
+        # Refresh the index only when something is about to be installed.
+        run sudo apt-get update -qq
+    fi
+
+    # Split the list so one unavailable package cannot abort the whole install.
+    local available=() missing=()
+    for pkg in "${todo[@]}"; do
         if [ "$DRY_RUN" = true ] || apt-cache show "$pkg" &> /dev/null; then
             available+=("$pkg")
         else
@@ -183,7 +205,7 @@ install_apt_packages() {
     done
 
     if [ ${#available[@]} -gt 0 ]; then
-        print_info "Installing ${#available[@]} apt packages..."
+        print_info "Installing ${#available[@]} apt packages: ${available[*]}"
         run sudo apt-get install -y "${available[@]}"
     fi
 
@@ -197,7 +219,7 @@ install_apt_packages() {
         run sudo ln -sf /usr/bin/batcat /usr/local/bin/bat
     fi
 
-    if command_exists docker && ! id -nG "$USER" | grep -qw docker; then
+    if command_exists docker && ! grep -qw docker < <(id -nG "$USER"); then
         run sudo usermod -aG docker "$USER"
         print_warning "Log out and back in for docker group membership to take effect"
     fi

@@ -17,6 +17,7 @@
 #                  the host — survives container recreation, no compose edits
 #   power          keep power-profiles-daemon on `performance`
 #   ollama         unload idle models, cap the service as a share of RAM
+#   gpu            hybrid-graphics laptops: NVIDIA GPU on-demand + runtime D3
 #   pl1            per-model Intel RAPL long-term power cap (thermal headroom)
 #
 # User part (no sudo):
@@ -67,7 +68,7 @@ write_root_file() {
     current=$(mktemp)
     cat > "$tmp"
     if [ -e "$path" ] && root_cat "$path" > "$current" && cmp -s "$tmp" "$current"; then
-        print_success "${path} is up to date"
+        TUNING_PRESENT=$(( ${TUNING_PRESENT:-0} + 1 ))
         rm -f "$tmp" "$current"
         return 1
     fi
@@ -85,6 +86,22 @@ write_root_file() {
     sudo install -D -m "$mode" "$tmp" "$path"
     rm -f "$tmp" "$current"
     print_info "Wrote $path"
+    TUNING_CHANGED=true
+    return 0
+}
+
+# ensure_enabled <unit> [--now]: enable a system unit unless it already is.
+ensure_enabled() {
+    systemctl is-enabled "$1" &> /dev/null && return 0
+    run sudo systemctl enable "$@" || print_warning "Could not enable $1"
+}
+
+# Reload systemd once per run, and only if a unit file actually changed.
+reload_if_changed() {
+    if [ "${TUNING_CHANGED:-false}" = true ] && [ "${TUNING_RELOADED:-false}" != true ]; then
+        run sudo systemctl daemon-reload
+        TUNING_RELOADED=true
+    fi
     return 0
 }
 
@@ -121,8 +138,8 @@ swap-priority = 100
 EOF
     # Bring it up on a fresh machine. On a running one the device already
     # exists and resizing it would mean swapping everything back in first.
-    if ! swapon --show=NAME --noheadings 2>/dev/null | grep -q zram; then
-        run sudo systemctl daemon-reload
+    if ! grep -q zram < <(swapon --show=NAME --noheadings 2>/dev/null); then
+        reload_if_changed
         run sudo systemctl start systemd-zram-setup@zram0.service \
             || print_warning "Could not start zram now; it starts on next boot"
     fi
@@ -148,8 +165,10 @@ w /sys/module/zfs/parameters/zfs_arc_max - - - - $max
 w /sys/module/zfs/parameters/zfs_arc_min - - - - $min
 EOF
     # Order matters when shrinking: max must never drop below min.
-    run sudo sh -c "echo $max > /sys/module/zfs/parameters/zfs_arc_max; echo $min > /sys/module/zfs/parameters/zfs_arc_min" \
-        || print_warning "Could not apply the ARC cap live; it applies on next boot"
+    if [ "$(cat /sys/module/zfs/parameters/zfs_arc_max)" != "$max" ] || [ "$(cat /sys/module/zfs/parameters/zfs_arc_min)" != "$min" ]; then
+        run sudo sh -c "echo $max > /sys/module/zfs/parameters/zfs_arc_max; echo $min > /sys/module/zfs/parameters/zfs_arc_min" \
+            || print_warning "Could not apply the ARC cap live; it applies on next boot"
+    fi
 
     if command_exists zpool; then
         tune_zpool_capacity
@@ -194,8 +213,8 @@ Persistent=true
 [Install]
 WantedBy=timers.target
 EOF
-    run sudo systemctl daemon-reload
-    run sudo systemctl enable --now zpool-capacity.timer || true
+    reload_if_changed
+    ensure_enabled zpool-capacity.timer --now
 }
 
 tune_journald() {
@@ -260,9 +279,7 @@ print(json.dumps(cfg, indent=2))
         daemon_changed=true
     fi
 
-    if [ "$slice_changed" = true ]; then
-        run sudo systemctl daemon-reload
-    fi
+    [ "$slice_changed" = true ] && reload_if_changed
 
     if [ "$daemon_changed" = true ]; then
         # The daemon must restart to pick up cgroup-parent; containers then land
@@ -296,8 +313,8 @@ ExecStart=/bin/sh -c 'for i in 1 2 3 4 5 6 7 8 9 10; do /usr/bin/powerprofilesct
 [Install]
 WantedBy=multi-user.target
 EOF
-    run sudo systemctl daemon-reload
-    run sudo systemctl enable force-performance.service || true
+    reload_if_changed
+    ensure_enabled force-performance.service
 }
 
 tune_ollama() {
@@ -315,9 +332,48 @@ MemoryMax=60%
 CPUWeight=50
 EOF
     then
-        run sudo systemctl daemon-reload
+        reload_if_changed
         run sudo systemctl try-restart ollama.service || true
     fi
+}
+
+is_laptop() {
+    ls /sys/class/power_supply/BAT* &> /dev/null
+}
+
+# Hybrid-graphics laptops: let the NVIDIA GPU sleep until something asks for it.
+#
+# Ubuntu's "nvidia" PRIME profile keeps the discrete GPU powered at all times,
+# a constant few watts of heat inside a laptop's power budget. "on-demand"
+# renders the desktop on the integrated GPU and wakes the NVIDIA one only for
+# work that requests it (CUDA, prime-run); runtime D3 powers it off between.
+#
+# This writes exactly the files `prime-select on-demand` writes, but skips its
+# `update-initramfs`, which has broken booting on ZFS-root before. That is only
+# safe when the nvidia modules are not inside the initramfs; otherwise warn.
+tune_gpu() {
+    command_exists prime-select || return 0
+    is_laptop || return 0
+    [ -f /run/nvidia_runtimepm_supported ] || return 0
+    local mode
+    mode=$(cat /etc/prime-discrete 2>/dev/null || echo unknown)
+    if [ "$mode" = on-demand ] && [ -f /lib/modprobe.d/nvidia-runtimepm.conf ]; then
+        mark_present "NVIDIA on-demand"
+        return 0
+    fi
+    # Process substitution, not a pipe: under pipefail `cmd | grep -q` fails
+    # with SIGPIPE whenever grep exits early, which would read as "not found"
+    # and skip this safety check.
+    if grep -qE '/nvidia(-drm|-modeset)?\.ko' < <(lsinitramfs "/boot/initrd.img-$(uname -r)" 2>/dev/null); then
+        print_warning "NVIDIA GPU is always on; the driver is in the initramfs, so switch with 'sudo prime-select on-demand' yourself"
+        return 0
+    fi
+    write_root_file /lib/modprobe.d/nvidia-runtimepm.conf 0644 <<'EOF' || true
+options nvidia "NVreg_DynamicPowerManagement=0x02"
+EOF
+    run sudo rm -f /lib/modprobe.d/blacklist-nvidia.conf
+    printf 'on-demand\n' | write_root_file /etc/prime-discrete 0644 || true
+    print_warning "NVIDIA GPU switched to on-demand: it sleeps after the next reboot (CUDA/prime-run still wake it)"
 }
 
 tune_pl1() {
@@ -355,8 +411,8 @@ AccuracySec=10s
 [Install]
 WantedBy=timers.target
 EOF
-    run sudo systemctl daemon-reload
-    run sudo systemctl enable --now cap-pl1.timer || true
+    reload_if_changed
+    ensure_enabled cap-pl1.timer --now
 }
 
 # --- User pieces ------------------------------------------------------------
@@ -371,27 +427,42 @@ tune_user() {
     # CPUWeight=idle already lets the desktop preempt them; the quota bounds
     # heat, which on a thin laptop is what actually throttles the desktop.
     quota=$(( cpus * 50 ))
-    run mkdir -p "$dropin"
-    if [ "$DRY_RUN" = true ]; then
-        print_dry "write $dropin/50-host.conf (CPUQuota=${quota}% MemorySwapMax=$swap_max)"
+
+    local file="$dropin/50-host.conf" want changed=false
+    want=$(printf '# Generated by dotfiles (lib/tuning.sh) for this host: %s CPUs, %s MB.\n[Slice]\nCPUQuota=%s%%\nMemorySwapMax=%s\n' \
+        "$cpus" "$(host_mem_mb)" "$quota" "$swap_max")
+    if [ "$(cat "$file" 2>/dev/null)" = "$want" ]; then
+        mark_present "background.slice sized for $cpus CPUs"
+    elif [ "$DRY_RUN" = true ]; then
+        print_dry "write $file (CPUQuota=${quota}% MemorySwapMax=$swap_max)"
     else
-        cat > "$dropin/50-host.conf" <<EOF
-# Generated by dotfiles (lib/tuning.sh) for this host: $cpus CPUs, $(host_mem_mb) MB.
-[Slice]
-CPUQuota=${quota}%
-MemorySwapMax=$swap_max
-EOF
+        mkdir -p "$dropin"
+        printf '%s\n' "$want" > "$file"
+        print_info "Sized background.slice: CPUQuota=${quota}%, MemorySwapMax=$swap_max"
+        changed=true
     fi
 
     if command_exists gsettings; then
-        run gsettings set org.gnome.settings-daemon.plugins.power power-saver-profile-on-low-battery false || true
+        if [ "$(gsettings get org.gnome.settings-daemon.plugins.power power-saver-profile-on-low-battery 2>/dev/null)" = false ]; then
+            mark_present "no auto power-saver"
+        else
+            run gsettings set org.gnome.settings-daemon.plugins.power power-saver-profile-on-low-battery false || true
+        fi
     fi
 
     if command_exists systemctl; then
-        run systemctl --user daemon-reload
-        run systemctl --user enable --now pc-freeze-guard.timer \
-            || print_warning "Could not enable pc-freeze-guard.timer"
+        [ "$changed" = true ] && run systemctl --user daemon-reload
+        local unit
+        for unit in pc-freeze-guard.timer pc-watch.service; do
+            if systemctl --user is-enabled "$unit" &> /dev/null; then
+                mark_present "$unit"
+            else
+                run systemctl --user enable --now "$unit" || print_warning "Could not enable $unit"
+            fi
+        done
     fi
+    flush_present "user settings"
+    return 0
 }
 
 install_tuning() {
@@ -403,12 +474,14 @@ install_tuning() {
     tune_docker
     tune_power
     tune_ollama
+    tune_gpu
     tune_pl1
-    print_success "System tuning applied"
+    print_present "${TUNING_PRESENT:-0}" "tuning files"
+    flush_present "settings"
+    return 0
 }
 
 install_user_tuning() {
     print_step "Tuning user services"
     tune_user
-    print_success "User tuning applied"
 }

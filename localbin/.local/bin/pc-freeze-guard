@@ -1,82 +1,101 @@
 #!/usr/bin/env bash
 # Freeze guard: the desktop's last line of defence, run every minute by
-# pc-freeze-guard.timer.
+# pc-freeze-guard.timer (and on demand by pc-watch's notification).
 #
 # Cgroup caps and the idle gate stop a background job from *choosing* to be
 # heavy. This catches what they cannot: many modest things adding up, or one
-# thing outgrowing its caps. Swap exhaustion is the failure it exists for --
-# when swap fills, every app goes to disk and the desktop reads as frozen even
-# with the CPU idle.
+# thing outgrowing its caps.
 #
-# Every threshold is relative to this machine (percent of RAM / swap), so the
-# same script behaves the same on any hardware.
+#   reclaim  swap >= 70%: TERM idle desktop utilities sitting on swap. The
+#            only action that gives swap back: a frozen process keeps every
+#            swapped page; a dead one frees them.
+#   freeze   lagging for 2 checks in a row: freeze every unit running in
+#            background.slice (systemd's cgroup freezer: no CPU, no I/O)
+#   stop     still lagging 5 checks in a row: stop the frozen units so their
+#            memory is released. They are resumable batch jobs; their timers
+#            start them again.
+#   thaw     once the machine is smooth again, thaw whatever was frozen
 #
-#   reclaim  swap >= WARN%   TERM idle desktop utilities sitting on swap. The
-#                            only action that gives swap back: a stopped
-#                            process keeps every swapped page; a dead one
-#                            frees them.
-#   pause    pressure for 2 consecutive checks: SIGSTOP background jobs
-#   kill     pressure for 5 consecutive checks: SIGKILL the paused jobs, which
-#            are resumable batch work, so their memory is actually released
-#   resume   once healthy, SIGCONT whatever this script paused
+# "Lagging" is the shared verdict in ~/.local/lib/pc/gauges.sh (pressure
+# stalls first, fill levels second, all percentages of this machine).
 #
-# "Pressure" = swap >= CRIT%, or MemAvailable < MEM_LOW% of RAM, or memory PSI
-# (some, avg10) >= PSI_STALL%.
+# Only units inside background.slice are frozen or stopped, so a browser, the
+# desktop, a terminal, or a shell that merely mentions a job's name can never
+# be caught - the guard used to match command lines and once froze a shell.
 #
-# Only processes owned by this user and matched by the lists below are ever
-# signalled. Browsers, the desktop and the terminal are never touched.
+#   pc-freeze-guard              one check (the timer runs this)
+#   pc-freeze-guard --freeze     freeze background jobs now
+#   pc-freeze-guard --thaw       thaw them now
 #
-# Lists (one entry per line, # comments allowed):
-#   ~/.config/pc-guard/background.patterns  extended regexes against the full
-#                                           command line: jobs that may be
-#                                           paused and killed
-#   ~/.config/pc-guard/reclaim.list         process names safe to TERM when
-#                                           they hold swap (default below)
+# ~/.config/pc-guard/reclaim.list overrides the process names safe to TERM.
 
 set -uo pipefail
+
+. "$HOME/.local/lib/pc/gauges.sh"
 
 CONF_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/pc-guard"
 STATE_DIR="${XDG_RUNTIME_DIR:-/tmp}/pc-freeze-guard"
 LOG="$STATE_DIR/guard.log"
+FROZEN="$STATE_DIR/frozen"
+STRIKES="$STATE_DIR/strikes"
 mkdir -p "$STATE_DIR"
 
 SWAP_WARN_PCT="${GUARD_SWAP_WARN_PCT:-70}"
-SWAP_CRIT_PCT="${GUARD_SWAP_CRIT_PCT:-90}"
-MEM_LOW_PCT="${GUARD_MEM_LOW_PCT:-8}"
-PSI_STALL_PCT="${GUARD_PSI_STALL_PCT:-10}"
-PAUSE_AFTER="${GUARD_PAUSE_AFTER:-2}"
-KILL_AFTER="${GUARD_KILL_AFTER:-5}"
+FREEZE_AFTER="${GUARD_FREEZE_AFTER:-2}"
+STOP_AFTER="${GUARD_STOP_AFTER:-5}"
 RECLAIM_MIN_MB="${GUARD_RECLAIM_MIN_MB:-150}"
 RECLAIM_COOLDOWN="${GUARD_RECLAIM_COOLDOWN:-900}"
 
 log() { printf '%s %s\n' "$(date -Is)" "$*" >> "$LOG"; }
 
-# Lines of a list file, comments and blanks stripped.
-read_list() {
-    [ -f "$1" ] || return 0
-    sed -e 's/#.*//' -e 's/[[:space:]]*$//' -e '/^$/d' "$1"
+# Units currently running in background.slice, read from the cgroup tree.
+background_units() {
+    local slice="/sys/fs/cgroup/user.slice/user-$UID.slice/user@$UID.service/background.slice" dir
+    for dir in "$slice"/*.service; do
+        [ -d "$dir" ] || continue
+        # cgroupfs files always report size 0, so test for content by reading.
+        read -r _ < "$dir/cgroup.procs" 2>/dev/null && basename "$dir"
+    done
 }
 
-# --- Gauges -----------------------------------------------------------------
+freeze_all() {
+    local unit n=0
+    while read -r unit; do
+        grep -qx "$unit" "$FROZEN" 2>/dev/null && continue
+        if systemctl --user freeze "$unit" 2>/dev/null; then
+            echo "$unit" >> "$FROZEN"
+            n=$((n + 1))
+            log "freeze: $unit ($1)"
+        fi
+    done < <(background_units)
+    echo "$n"
+}
 
-mem_total_kb=$(awk '/^MemTotal:/ {print $2}' /proc/meminfo)
-mem_avail_kb=$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo)
-swap_total_kb=$(awk '/^SwapTotal:/ {print $2}' /proc/meminfo)
-swap_free_kb=$(awk '/^SwapFree:/ {print $2}' /proc/meminfo)
-swap_pct=0
-[ "${swap_total_kb:-0}" -gt 0 ] && swap_pct=$(( (swap_total_kb - swap_free_kb) * 100 / swap_total_kb ))
-mem_avail_pct=$(( mem_avail_kb * 100 / mem_total_kb ))
-psi=$(awk '/^some/ {for (i = 1; i <= NF; i++) if ($i ~ /^avg10=/) {sub("avg10=", "", $i); print $i}}' \
-    /proc/pressure/memory 2>/dev/null)
-psi=${psi:-0}
+thaw_all() {
+    [ -s "$FROZEN" ] || { echo 0; return; }
+    local unit n=0
+    while read -r unit; do
+        systemctl --user thaw "$unit" 2>/dev/null && n=$((n + 1))
+    done < "$FROZEN"
+    : > "$FROZEN"
+    log "thaw: $n unit(s) ($1)"
+    echo "$n"
+}
 
-gauges="swap=${swap_pct}% avail=${mem_avail_pct}% psi=${psi}"
+case "${1:-}" in
+    --freeze) echo "Froze $(freeze_all "requested") background job(s)"; exit 0 ;;
+    --thaw) echo "Thawed $(thaw_all "requested") background job(s)"; exit 0 ;;
+esac
+
+gauge_read
+gauge_verdict
+gauges="mem=${GAUGE_MEM_USED_PCT}% swap=${GAUGE_SWAP_PCT}% psi=${GAUGE_PSI_MEM}/${GAUGE_PSI_IO} temp=${GAUGE_TEMP_C:-?}"
 
 # --- Reclaim: give swap back on warning-level swap --------------------------
 
 reclaim_names() {
     if [ -f "$CONF_DIR/reclaim.list" ]; then
-        read_list "$CONF_DIR/reclaim.list"
+        sed -e 's/#.*//' -e 's/[[:space:]]*$//' -e '/^$/d' "$CONF_DIR/reclaim.list"
     else
         # Desktop utilities that idle for hours on hundreds of MB and are
         # relaunched on demand. Never browsers, mail, or anything with state.
@@ -84,99 +103,42 @@ reclaim_names() {
     fi
 }
 
-reclaim_swap() {
-    local name comm pid swap_kb stamp now
+if [ "$GAUGE_SWAP_PCT" -ge "$SWAP_WARN_PCT" ]; then
     now=$(date +%s)
     while read -r name; do
-        # /proc/<pid>/comm is truncated to 15 characters.
-        comm=${name:0:15}
+        comm=${name:0:15}   # /proc/<pid>/comm is truncated to 15 characters
         for pid in $(pgrep -u "$UID" -x "$comm" 2>/dev/null); do
             swap_kb=$(awk '/^VmSwap:/ {print $2}' "/proc/$pid/status" 2>/dev/null)
             [ "$(( ${swap_kb:-0} / 1024 ))" -ge "$RECLAIM_MIN_MB" ] || continue
             stamp="$STATE_DIR/reclaimed.$comm"
-            if [ -f "$stamp" ] && [ $(( now - $(cat "$stamp") )) -lt "$RECLAIM_COOLDOWN" ]; then
-                continue
-            fi
+            [ -f "$stamp" ] && [ $(( now - $(cat "$stamp") )) -lt "$RECLAIM_COOLDOWN" ] && continue
             kill -TERM "$pid" 2>/dev/null || continue
             echo "$now" > "$stamp"
             log "reclaim: TERM $comm ($pid) holding $(( swap_kb / 1024 ))MB swap ($gauges)"
         done
     done < <(reclaim_names)
-}
-
-# Name the big swap holders this script will not touch, so "what is using my
-# swap?" has an answer in the log.
-report_swap_holders() {
-    local line
-    line=$(for status in /proc/[0-9]*/status; do
-        awk '/^Name:/ {n = $2} /^VmSwap:/ {if ($2 > 204800) printf "%s:%dMB\n", n, $2 / 1024}' "$status" 2>/dev/null
-    done | sort -t: -k2 -rn | head -5 | tr '\n' ' ')
-    [ -n "$line" ] && log "largest swap holders: $line"
-}
-
-if [ "$swap_pct" -ge "$SWAP_WARN_PCT" ]; then
-    reclaim_swap
-    report_swap_holders
 fi
 
-# --- Escalation for background jobs -----------------------------------------
+# --- Escalation -------------------------------------------------------------
 
-background_pids() {
-    local pattern
-    while read -r pattern; do
-        pgrep -u "$UID" -f -- "$pattern" 2>/dev/null
-    done < <(read_list "$CONF_DIR/background.patterns") | grep -vx "$$" | sort -u
-}
-
-# Paused jobs are recorded as "pid starttime" so a pid recycled by an unrelated
-# process after the job exits is never resumed or killed by mistake.
-# Field 22 of /proc/<pid>/stat, counted after the "(comm)" field, which can
-# itself contain spaces.
-proc_start() { sed 's/.*) //' "/proc/$1/stat" 2>/dev/null | awk '{print $20}'; }
-still_ours() { [ -n "$2" ] && [ "$(proc_start "$1")" = "$2" ]; }
-
-strikes_file="$STATE_DIR/strikes"
-paused_file="$STATE_DIR/paused"
-strikes=$(cat "$strikes_file" 2>/dev/null || echo 0)
-
-under_pressure=0
-[ "$swap_pct" -ge "$SWAP_CRIT_PCT" ] && under_pressure=1
-[ "$mem_avail_pct" -lt "$MEM_LOW_PCT" ] && under_pressure=1
-awk -v p="$psi" -v t="$PSI_STALL_PCT" 'BEGIN {exit !(p + 0 >= t + 0)}' && under_pressure=1
-
-if [ "$under_pressure" -eq 0 ]; then
-    if [ -s "$paused_file" ]; then
-        while read -r pid start; do
-            still_ours "$pid" "$start" && kill -CONT "$pid" 2>/dev/null
-        done < "$paused_file"
-        log "healthy ($gauges): resumed $(wc -l < "$paused_file") paused job(s)"
-        : > "$paused_file"
-    fi
-    echo 0 > "$strikes_file"
+if [ "$GAUGE_LEVEL" != crit ]; then
+    [ -s "$FROZEN" ] && thaw_all "smooth again: $gauges" > /dev/null
+    echo 0 > "$STRIKES"
     exit 0
 fi
 
-strikes=$(( strikes + 1 ))
-echo "$strikes" > "$strikes_file"
-log "pressure strike $strikes ($gauges)"
+strikes=$(( $(cat "$STRIKES" 2>/dev/null || echo 0) + 1 ))
+echo "$strikes" > "$STRIKES"
+log "lagging, strike $strikes: $GAUGE_REASONS ($gauges)"
 
-if [ "$strikes" -ge "$KILL_AFTER" ] && [ -s "$paused_file" ]; then
-    while read -r pid start; do
-        still_ours "$pid" "$start" || continue
-        kill -KILL "$pid" 2>/dev/null \
-            && log "kill: $pid ($(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null | cut -c1-60))"
-    done < "$paused_file"
-    : > "$paused_file"
-elif [ "$strikes" -ge "$PAUSE_AFTER" ]; then
-    for pid in $(background_pids); do
-        grep -q "^$pid " "$paused_file" 2>/dev/null && continue
-        start=$(proc_start "$pid")
-        [ -n "$start" ] || continue
-        if kill -STOP "$pid" 2>/dev/null; then
-            echo "$pid $start" >> "$paused_file"
-            log "pause: $pid ($(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null | cut -c1-60))"
-        fi
-    done
+if [ "$strikes" -ge "$STOP_AFTER" ] && [ -s "$FROZEN" ]; then
+    while read -r unit; do
+        systemctl --user thaw "$unit" 2>/dev/null
+        systemctl --user stop "$unit" 2>/dev/null && log "stop: $unit"
+    done < "$FROZEN"
+    : > "$FROZEN"
+elif [ "$strikes" -ge "$FREEZE_AFTER" ]; then
+    freeze_all "$GAUGE_REASONS" > /dev/null
 fi
 
 exit 0

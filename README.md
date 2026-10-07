@@ -84,14 +84,14 @@ Everything else is a stow package whose directory mirrors its target path:
 | `bashrc` | `$HOME` | `.bashrc`, `.bash_profile`, `.profile`, `.inputrc`, `.tmux.conf` |
 | `gitconfig` | `$HOME` | `.gitconfig` |
 | `ssh` | `$HOME` | `.ssh/config` |
-| `localbin` | `$HOME` | `.local/bin` scripts: `pc-freeze-guard`, `pc-background-gate`, `fix-pc-sleep` |
+| `localbin` | `$HOME` | `.local/bin`: `pc-watch`, `pc-status`, `pc-freeze-guard`, `pc-background-gate`, `fix-pc-sleep`; `.local/lib/pc` shared gauges |
 | `agents` | `$HOME` | Claude and Gemini config files |
 | `skills` | `$HOME` | `.agents/skills` — the shared skill store |
 | `nvim` `tmux` `starship` `wezterm` | `$HOME/.config` | editor, multiplexer, prompt, terminal |
 | `vscode` | `$HOME/.config` | `Code/User` settings, keybindings, snippets, MCP |
 | `opencode` | `$HOME/.config` | `opencode.jsonc` |
-| `systemd` | `$HOME/.config` | `background.slice` and the freeze-guard timer |
-| `applications` | `$HOME/.local/share` | `.desktop` overrides |
+| `systemd` | `$HOME/.config` | `background.slice`, the freeze-guard timer, `pc-watch.service` |
+| `applications` | `$HOME/.local/share` | `.desktop` overrides, the pc-watch icon |
 
 ## Resource tuning
 
@@ -107,13 +107,29 @@ big workstation. Re-run it after moving to new hardware.
 | Batch jobs (`background.slice`) | reclaim at 25% of RAM, hard cap 35%, half the cores, idle CPU priority |
 | Ollama | unload after 5 idle minutes, one model, cap 60% of RAM |
 | Power | `performance` profile at boot; PL1 cap only on listed laptop models |
+| Hybrid-graphics laptops | NVIDIA GPU on-demand with runtime D3, so it sleeps until CUDA/prime-run wakes it |
 
 A user unit joins the batch pool with `Slice=background.slice`.
-`pc-freeze-guard` runs every minute: on high swap it restarts idle desktop
-utilities that sit on swap, and under sustained memory pressure it pauses,
-then kills, the jobs listed in `~/.config/pc-guard/background.patterns`.
-`pc-background-gate <cmd>` starts a command only once the desktop has been
-idle for a while and stops it when you come back.
+
+### Staying smooth
+
+| Command | What it does |
+| --- | --- |
+| `pc-watch` (service) | Reads pressure stalls, memory, swap and temperature every 5 s. When the machine is *about* to lag it pops a notification naming the cause and the heaviest apps, with **Details** and **Pause background jobs** buttons. One per episode, updated in place, then a short "back to normal". |
+| `pc-status [--watch]` | One screen: smooth / getting heavy / lagging and why, usage bars, slice limits, heaviest apps, recent guard actions. |
+| `pc-freeze-guard` (every minute) | On high swap, restarts idle desktop utilities sitting on swap. Lagging for 2 minutes: freezes every unit in `background.slice`; 5 minutes: stops them. Thaws when smooth. `--freeze` / `--thaw` by hand. |
+| `pc-background-gate <cmd>` | Starts a command only after the desktop has been idle for a while and stops it when you return. |
+
+All of them share one rule (`~/.local/lib/pc/gauges.sh`): pressure-stall time
+first, because that is what lag is; fill levels second; swap only counts while
+RAM is also tight. Every threshold is a percentage.
+
+### Re-running is cheap
+
+Every step checks what is already there and reports it on one line
+(`✓ 80 apt packages already in place`); only missing pieces are installed,
+`apt-get update` runs only when something is about to be installed, and
+services are enabled only if they are not already.
 
 ## Personal overlay
 

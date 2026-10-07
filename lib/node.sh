@@ -10,7 +10,7 @@ install_node() {
     export NVM_DIR="$HOME/.config/nvm"
 
     if [ -s "$NVM_DIR/nvm.sh" ]; then
-        print_info "NVM is already installed"
+        mark_present "NVM"
     else
         print_info "Installing NVM..."
         run mkdir -p "$NVM_DIR"
@@ -19,24 +19,26 @@ install_node() {
     fi
 
     if [ "$DRY_RUN" = true ]; then
-        print_dry "nvm install --lts && nvm alias default 'lts/*'"
+        # Load nvm read-only so the probes below see what is really installed.
+        [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && nvm use default > /dev/null 2>&1
+        if command_exists node; then mark_present "node $(node --version)"; else print_dry "nvm install --lts && nvm alias default 'lts/*'"; fi
     else
         # shellcheck disable=SC1091
         . "$NVM_DIR/nvm.sh"
-        if ! nvm ls --lts --no-colors 2>/dev/null | grep -q 'v[0-9]'; then
+        if ! grep -q 'v[0-9]' < <(nvm ls --lts --no-colors 2>/dev/null); then
             nvm install --lts
         fi
-        nvm alias default 'lts/*'
-        nvm use default
-        print_success "Node active version: $(node --version)"
+        [ "$(nvm alias default 2>/dev/null | grep -c 'lts/\*')" -gt 0 ] || nvm alias default 'lts/*' > /dev/null
+        nvm use default > /dev/null
+        mark_present "node $(node --version)"
     fi
 
-    if command_exists corepack; then
+    if command_exists corepack && ! command_exists pnpm; then
         run corepack enable pnpm
     fi
 
     if command_exists bun; then
-        print_info "bun is already installed"
+        mark_present "bun"
     else
         print_info "Installing bun..."
         shielded bash -c "curl -fsSL https://bun.sh/install | bash"
@@ -45,14 +47,14 @@ install_node() {
     export PATH="$BUN_INSTALL/bin:$PATH"
 
     export PNPM_HOME="$HOME/.local/share/pnpm"
-    run mkdir -p "$PNPM_HOME"
+    [ -d "$PNPM_HOME" ] || run mkdir -p "$PNPM_HOME"
     export PATH="$PNPM_HOME:$PNPM_HOME/bin:$PATH"
 
     install_globals npm npm install -g
     install_globals pnpm pnpm add -g
     install_globals bun bun add -g
 
-    print_success "Node toolchain ready"
+    flush_present "node tools"
 }
 
 # install_globals <manifest-name> <install command...>
@@ -75,8 +77,23 @@ install_globals() {
     read_manifest packages "${files[@]}"
     [ ${#packages[@]} -eq 0 ] && return 0
 
-    local pkg
-    for pkg in "${packages[@]}"; do
+    local pkg installed
+    case $manager in
+        # `|| true`: a failing lister must not abort the run under set -e.
+        npm) installed=$(npm ls -g --depth=0 --parseable 2>/dev/null | sed 's#.*/node_modules/##' || true) ;;
+        pnpm) installed=$(pnpm ls -g --depth=0 --parseable 2>/dev/null | sed 's#.*/node_modules/##' || true) ;;
+        bun) installed=$(bun pm ls -g 2>/dev/null | sed -n 's/^[├└]── \(.*\)@[^@]*$/\1/p' || true) ;;
+    esac
+    local entry bin
+    for entry in "${packages[@]}"; do
+        # Manifest lines may name the command a package provides:
+        # "@google/gemini-cli gemini". Present on PATH counts as installed,
+        # whichever node or tool put it there.
+        read -r pkg bin <<< "$entry"
+        if grep -qxF -- "$pkg" <<< "$installed" || { [ -n "$bin" ] && command_exists "$bin"; }; then
+            mark_present "$pkg"
+            continue
+        fi
         print_info "$manager: installing $pkg..."
         run "${install_cmd[@]}" "$pkg" || print_warning "$manager install $pkg failed, continuing"
     done

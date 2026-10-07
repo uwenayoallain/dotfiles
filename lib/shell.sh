@@ -4,7 +4,7 @@
 
 install_oh_my_bash() {
     if [ -d "$HOME/.oh-my-bash" ]; then
-        print_info "Oh My Bash is already installed"
+        mark_present "Oh My Bash"
         return 0
     fi
     print_info "Installing Oh My Bash..."
@@ -16,7 +16,7 @@ install_oh_my_bash() {
 install_tpm() {
     local tpm_dir="$HOME/.tmux/plugins/tpm"
     if [ -d "$tpm_dir" ]; then
-        print_info "TPM is already installed"
+        mark_present "TPM"
         return 0
     fi
     print_info "Installing TPM..."
@@ -24,15 +24,21 @@ install_tpm() {
 }
 
 install_tmux_plugins() {
-    if [ -x "$HOME/.tmux/plugins/tpm/bin/install_plugins" ]; then
-        print_info "Installing tmux plugins..."
-        run "$HOME/.tmux/plugins/tpm/bin/install_plugins"
-    fi
+    [ -x "$HOME/.tmux/plugins/tpm/bin/install_plugins" ] || return 0
+    # Skip when every @plugin in the config already has its directory.
+    local conf="$HOME/.config/tmux/tmux.conf" plugin missing=0 dir
+    for plugin in $(sed -n "s/^set -g @plugin '\([^']*\)'.*/\1/p" "$conf" 2>/dev/null); do
+        dir=${plugin##*/}
+        [ -d "$HOME/.config/tmux/plugins/$dir" ] || [ -d "$HOME/.tmux/plugins/$dir" ] || missing=$((missing + 1))
+    done
+    [ "$missing" -eq 0 ] && return 0
+    print_info "Installing $missing tmux plugin(s)..."
+    run "$HOME/.tmux/plugins/tpm/bin/install_plugins"
 }
 
 install_nerd_font() {
-    if fc-list 2>/dev/null | grep -qi GeistMono; then
-        print_info "GeistMono Nerd Font is already installed"
+    if grep -qi GeistMono < <(fc-list : family 2>/dev/null); then
+        mark_present "GeistMono Nerd Font"
         return 0
     fi
 
@@ -58,6 +64,10 @@ install_gnome_terminal_theme() {
     fi
     command_exists dconf || run sudo apt-get install -y dconf-cli uuid-runtime
 
+    if grep -qi catppuccin < <(dconf dump /org/gnome/terminal/legacy/profiles:/ 2>/dev/null); then
+        mark_present "Catppuccin terminal theme"
+        return 0
+    fi
     print_info "Installing Catppuccin theme for GNOME Terminal..."
     if [ "$DRY_RUN" = true ]; then
         print_dry "clone catppuccin/gnome-terminal and run install.py"
@@ -83,5 +93,5 @@ install_shell_env() {
     else
         print_info "Desktop tier inactive, skipping fonts and terminal theme"
     fi
-    print_success "Shell environment ready"
+    flush_present "shell pieces"
 }

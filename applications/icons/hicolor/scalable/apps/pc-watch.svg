@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- PC watch: a pressure gauge in Catppuccin Mocha. -->
+  <rect x="4" y="4" width="56" height="56" rx="14" fill="#1e1e2e"/>
+  <path d="M14 42a18 18 0 0 1 36 0" fill="none" stroke="#45475a" stroke-width="6" stroke-linecap="round"/>
+  <path d="M14 42a18 18 0 0 1 9-15.6" fill="none" stroke="#a6e3a1" stroke-width="6" stroke-linecap="round"/>
+  <path d="M23 26.4a18 18 0 0 1 18 0" fill="none" stroke="#f9e2af" stroke-width="6"/>
+  <path d="M41 26.4a18 18 0 0 1 9 15.6" fill="none" stroke="#f38ba8" stroke-width="6" stroke-linecap="round"/>
+  <path d="M32 42 L42 29" stroke="#cba6f7" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="32" cy="42" r="4.5" fill="#cba6f7"/>
+</svg>
