@@ -207,6 +207,7 @@ main() {
     if module_enabled apt; then
         install_apt_repos
         install_apt_packages
+        configure_auto_updates
     fi
     if module_enabled brew; then install_brew; setup_fzf; fi
     if module_enabled snap; then install_snaps; fi
@@ -246,7 +247,7 @@ main() {
   5. Authenticate:  gh auth login
                     ngrok config add-authtoken <token>
                     sudo tailscale up
-                    claude / codex / gemini / opencode / cursor-agent  (each has its own login)
+                    claude / codex / agy / opencode  (each has its own login)
   6. gh extension install github/gh-copilot   — enables the ghcs/ghce shell helpers
   7. Review packages/desktop/manual.md for apps that need a hand-download
 EOF

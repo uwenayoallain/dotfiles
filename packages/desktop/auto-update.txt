@@ -1,0 +1,8 @@
+# Third-party apt repositories whose packages update themselves, unattended,
+# alongside Ubuntu's security updates (apt-daily-upgrade.timer, once a day,
+# and at the next boot if the machine was off).
+#
+# One unattended-upgrades origin pattern per line: the o=/a= values from
+# `apt-cache policy` for that repository.
+
+o=code stable,a=stable              # VS Code

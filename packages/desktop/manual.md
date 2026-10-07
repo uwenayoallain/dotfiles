@@ -26,4 +26,4 @@ stow and hardcode a path that belongs to the vendor. Installing the package
 
 TablePlus licence key, AnyDesk unattended-access password, ngrok authtoken,
 Tailscale login, GitHub CLI login, and the AI CLI logins (Claude, Codex,
-Gemini, OpenCode, Cursor Agent, CodeRabbit).
+Antigravity, OpenCode, CodeRabbit).

@@ -182,7 +182,7 @@ These cannot be scripted:
 2. Log out and back in so `docker` group membership applies.
 3. Authenticate: `gh auth login`, `ngrok config add-authtoken <token>`,
    `sudo tailscale up`, plus the individual logins for `claude`, `codex`,
-   `gemini`, `opencode`, `cursor-agent`, and `coderabbit`.
+   `agy`, `opencode`, and `coderabbit`.
 4. `gh extension install github/gh-copilot` — enables the `ghcs` / `ghce`
    shell helpers defined in `.bashrc`.
 5. Inside tmux, `prefix + I` to install plugins (the installer does this too).

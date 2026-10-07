@@ -19,7 +19,7 @@ lib/                   One module per concern, sourced by install.sh
   snap.sh              Snap and Flatpak
   node.sh              NVM, Node LTS, npm/pnpm/bun globals
   sdk.sh               Vite+ toolchain
-  apps.sh              DuckDB, AI CLIs, miniserve, AppImageLauncher
+  apps.sh              DuckDB, Claude Code, Antigravity CLI, Ollama, miniserve, AppImageLauncher
   shell.sh             Oh My Bash, TPM, fonts, GNOME Terminal theme
   desktop.sh           dconf dump/load, VS Code extensions
   skills.sh            Agent skill fan-out, Claude Code plugins

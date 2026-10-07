@@ -87,7 +87,7 @@ install_globals() {
     local entry bin
     for entry in "${packages[@]}"; do
         # Manifest lines may name the command a package provides:
-        # "@google/gemini-cli gemini". Present on PATH counts as installed,
+        # "@openai/codex codex". Present on PATH counts as installed,
         # whichever node or tool put it there.
         read -r pkg bin <<< "$entry"
         if grep -qxF -- "$pkg" <<< "$installed" || { [ -n "$bin" ] && command_exists "$bin"; }; then

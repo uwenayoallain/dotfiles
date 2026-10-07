@@ -31,6 +31,16 @@ install_claude_code() {
         || print_warning "Claude Code install failed, continuing"
 }
 
+install_antigravity_cli() {
+    if command_exists agy; then
+        mark_present "Antigravity CLI"
+        return 0
+    fi
+    print_info "Installing Antigravity CLI (agy)..."
+    shielded bash -c "curl -fsSL https://antigravity.google/cli/install.sh | bash" \
+        || print_warning "Antigravity CLI install failed, continuing"
+}
+
 install_coderabbit() {
     if command_exists coderabbit; then
         mark_present "CodeRabbit CLI"
@@ -39,16 +49,6 @@ install_coderabbit() {
     print_info "Installing CodeRabbit CLI..."
     shielded bash -c "curl -fsSL https://cli.coderabbit.ai/install.sh | bash" \
         || print_warning "CodeRabbit install failed, continuing"
-}
-
-install_cursor_agent() {
-    if command_exists cursor-agent || [ -x "$HOME/.local/bin/agent" ]; then
-        mark_present "Cursor Agent"
-        return 0
-    fi
-    print_info "Installing Cursor Agent..."
-    shielded bash -c "curl -fsSL https://cursor.com/install | bash" \
-        || print_warning "Cursor Agent install failed, continuing"
 }
 
 install_ollama() {
@@ -125,8 +125,8 @@ install_apps() {
     print_step "Installing standalone applications"
     install_duckdb
     install_claude_code
+    install_antigravity_cli
     install_coderabbit
-    install_cursor_agent
     install_miniserve
     install_appimagelauncher
     install_ollama

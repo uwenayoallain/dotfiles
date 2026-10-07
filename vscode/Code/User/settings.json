@@ -185,7 +185,7 @@
     "*.dbclient-js": "javascript",
     "*.sqlbook": "sql",
     "*.ndjson": "jsonl",
-    ".env*": "dotenv"
+    ".env*": "dotenv",
   },
   "editor.tokenColorCustomizations": {
     "[*Light*]": {
@@ -193,22 +193,22 @@
         {
           "scope": "ref.matchtext",
           "settings": {
-            "foreground": "#000"
-          }
-        }
-      ]
+            "foreground": "#000",
+          },
+        },
+      ],
     },
     "[*Dark*]": {
       "textMateRules": [
         {
           "scope": "ref.matchtext",
           "settings": {
-            "foreground": "#fff"
-          }
-        }
-      ]
+            "foreground": "#fff",
+          },
+        },
+      ],
     },
-    "textMateRules": []
+    "textMateRules": [],
   },
   "terminal.integrated.fontLigatures.enabled": true,
   "terminal.integrated.fontFamily": "monospace",
@@ -220,7 +220,6 @@
   "gitlens.rebaseEditor.ordering": "asc",
   "githubPullRequests.pullBranch": "never",
   "gitlens.ai.model": "vscode",
-  "gitlens.ai.vscode.model": "copilot:gemini-2.5-pro",
   "github.copilot.selectedCompletionModel": "",
   "github.copilot.nextEditSuggestions.enabled": true,
   "git.openRepositoryInParentFolders": "never",
@@ -256,4 +255,17 @@
   "chat.titleBar.openInAgentsWindow.enabled": false,
   "workbench.layoutControl.enabled": false,
   "makefile.configureOnOpen": true,
+  "gitlens.views.scm.grouped.views": {
+    "commits": true,
+    "branches": true,
+    "remotes": true,
+    "stashes": true,
+    "tags": true,
+    "worktrees": true,
+    "contributors": true,
+    "fileHistory": false,
+    "repositories": true,
+    "searchAndCompare": false,
+    "launchpad": true,
+  },
 }

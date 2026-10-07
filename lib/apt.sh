@@ -116,9 +116,14 @@ install_apt_repos() {
         /usr/share/keyrings/google-chrome-beta.gpg "$SOURCES_DIR/google-chrome-beta.sources" \
         "$(deb822 "Google Chrome (beta)" https://dl.google.com/linux/chrome-beta/deb/ stable /usr/share/keyrings/google-chrome-beta.gpg)"
 
-    add_repo vscode \
-        "https://packages.microsoft.com/keys/microsoft.asc" \
-        "deb [arch=$arch signed-by=$KEYRINGS_DIR/vscode.gpg] https://packages.microsoft.com/repos/code stable main"
+    add_vendor_repo vscode "https://packages.microsoft.com/keys/microsoft.asc" \
+        /usr/share/keyrings/microsoft.gpg "$SOURCES_DIR/vscode.sources" \
+        "Types: deb
+URIs: https://packages.microsoft.com/repos/code
+Suites: stable
+Components: main
+Architectures: amd64,arm64,armhf
+Signed-By: /usr/share/keyrings/microsoft.gpg"
 
     add_repo ngrok \
         "https://ngrok-agent.s3.amazonaws.com/ngrok.asc" \
@@ -136,9 +141,6 @@ install_apt_repos() {
         "https://downloads.claude.ai/claude-desktop/apt/stable/claude-desktop-archive-keyring.asc" \
         "deb [arch=amd64,arm64 signed-by=$KEYRINGS_DIR/claude-desktop.gpg] https://downloads.claude.ai/claude-desktop/apt/stable stable main"
 
-    add_repo windsurf \
-        "https://windsurf-stable.codeiumdata.com/wVxQEIWkwPUEAGf3/apt/public.gpg" \
-        "deb [arch=amd64 signed-by=$KEYRINGS_DIR/windsurf.gpg] https://windsurf-stable.codeiumdata.com/wVxQEIWkwPUEAGf3/apt stable main"
 
     add_repo antigravity \
         "https://us-central1-apt.pkg.dev/doc/repo-signing-key.gpg" \
@@ -165,6 +167,31 @@ install_apt_repos() {
         run sudo apt-get update -qq
     fi
     return 0
+}
+
+# Let unattended-upgrades keep the third-party repos in auto-update.txt
+# current, so apps like VS Code never need a manual download again.
+configure_auto_updates() {
+    local files=() patterns=() p body
+    tier_manifests files auto-update
+    read_manifest patterns "${files[@]}"
+    [ ${#patterns[@]} -gt 0 ] || return 0
+    body="// Managed by dotfiles (lib/apt.sh, packages/*/auto-update.txt).
+Unattended-Upgrade::Origins-Pattern {"
+    for p in "${patterns[@]}"; do body+=$'\n'"    \"$p\";"; done
+    body+=$'\n'"};"
+    local file=/etc/apt/apt.conf.d/52dotfiles-auto-update
+    if [ "$(cat "$file" 2>/dev/null)" = "$body" ]; then
+        print_present "${#patterns[@]}" "auto-updating repositories"
+        return 0
+    fi
+    if [ "$DRY_RUN" = true ]; then
+        print_dry "write $file (${#patterns[@]} auto-updating repositories)"
+        return 0
+    fi
+    printf '%s\n' "$body" | sudo tee "$file" > /dev/null
+    command_exists unattended-upgrade || sudo apt-get install -y unattended-upgrades
+    print_success "Auto-updates on for: ${patterns[*]}"
 }
 
 install_apt_packages() {

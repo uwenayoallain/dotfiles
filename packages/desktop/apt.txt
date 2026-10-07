@@ -24,7 +24,6 @@ stacer
 tableplus
 uuid-runtime
 vlc
-windsurf
 
 # Not from a repository — installed by lib/apps.sh from a GitHub release:
 #   appimagelauncher
