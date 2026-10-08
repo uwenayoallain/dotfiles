@@ -16,8 +16,8 @@
 #            start them again.
 #   thaw     once the machine is smooth again, thaw whatever was frozen
 #
-# "Lagging" is the shared verdict in ~/.local/lib/pc/gauges.sh (pressure
-# stalls first, fill levels second, all percentages of this machine).
+# "Lagging" is gauge_lag in ~/.local/lib/pc/gauges.sh, the same rule pc-watch
+# alerts on: time actually spent waiting, never fill levels alone.
 #
 # Only units inside background.slice are frozen or stopped, so a browser, the
 # desktop, a terminal, or a shell that merely mentions a job's name can never
@@ -88,7 +88,7 @@ case "${1:-}" in
 esac
 
 gauge_read
-gauge_verdict
+gauge_lag
 gauges="mem=${GAUGE_MEM_USED_PCT}% swap=${GAUGE_SWAP_PCT}% psi=${GAUGE_PSI_MEM}/${GAUGE_PSI_IO} temp=${GAUGE_TEMP_C:-?}"
 
 # --- Reclaim: give swap back on warning-level swap --------------------------
@@ -121,7 +121,7 @@ fi
 
 # --- Escalation -------------------------------------------------------------
 
-if [ "$GAUGE_LEVEL" != crit ]; then
+if [ "$LAG_LEVEL" != crit ]; then
     [ -s "$FROZEN" ] && thaw_all "smooth again: $gauges" > /dev/null
     echo 0 > "$STRIKES"
     exit 0
@@ -129,7 +129,7 @@ fi
 
 strikes=$(( $(cat "$STRIKES" 2>/dev/null || echo 0) + 1 ))
 echo "$strikes" > "$STRIKES"
-log "lagging, strike $strikes: $GAUGE_REASONS ($gauges)"
+log "lagging, strike $strikes: $LAG_REASONS ($gauges)"
 
 if [ "$strikes" -ge "$STOP_AFTER" ] && [ -s "$FROZEN" ]; then
     while read -r unit; do
@@ -138,7 +138,7 @@ if [ "$strikes" -ge "$STOP_AFTER" ] && [ -s "$FROZEN" ]; then
     done < "$FROZEN"
     : > "$FROZEN"
 elif [ "$strikes" -ge "$FREEZE_AFTER" ]; then
-    freeze_all "$GAUGE_REASONS" > /dev/null
+    freeze_all "$LAG_REASONS" > /dev/null
 fi
 
 exit 0

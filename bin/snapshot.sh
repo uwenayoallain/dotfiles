@@ -119,6 +119,7 @@ CONFIG_PAIRS=(
     "localbin/.local/bin/pc-background-gate:$HOME/.local/bin/pc-background-gate"
     "localbin/.local/bin/pc-watch:$HOME/.local/bin/pc-watch"
     "localbin/.local/bin/pc-status:$HOME/.local/bin/pc-status"
+    "localbin/.local/bin/pc-fix:$HOME/.local/bin/pc-fix"
     "localbin/.local/lib/pc/gauges.sh:$HOME/.local/lib/pc/gauges.sh"
     "systemd/systemd/user/pc-watch.service:$HOME/.config/systemd/user/pc-watch.service"
     "systemd/systemd/user/background.slice:$HOME/.config/systemd/user/background.slice"

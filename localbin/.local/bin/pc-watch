@@ -1,131 +1,146 @@
 #!/usr/bin/env bash
-# Early warning: a desktop notification *before* the machine starts to lag.
+# Early warning: a desktop notification only when the machine is genuinely
+# starting to lag, with a button that opens the fix.
 #
-# Runs as pc-watch.service. Every few seconds it reads the shared gauges
-# (~/.local/lib/pc/gauges.sh: pressure stalls, memory, swap, temperature, all
-# relative to this machine). When the verdict has been "getting heavy" or
-# "lagging" for two samples in a row, it shows one notification naming the
-# cause and the heaviest apps, with two buttons:
+# Runs as pc-watch.service, reading the shared gauges every 5 s. It alerts on
+# gauge_lag (~/.local/lib/pc/gauges.sh): things a person actually feels -
+# apps waiting on memory or disk, a CPU so saturated that tasks queue, memory
+# about to run out, a throttling CPU. Fill levels alone never alert.
 #
-#   Details                 opens pc-status --watch in a terminal
+# Quiet by design:
+#   - the condition must hold for 30 s ("getting heavy") or 15 s ("lagging"),
+#     so a build spike or a moment of swapping never raises anything
+#   - at most one alert per 30 min; inside that window only an escalation from
+#     "getting heavy" to "lagging" may alert, once
+#   - no "back to normal" popup
+#
+# Buttons:
+#   Fix it                  opens pc-fix: heavy hitters, tick what to stop
 #   Pause background jobs   freezes everything in background.slice
 #
-# One notification per episode, updated in place while it lasts and replaced
-# by a brief "back to normal" when it ends. A new episode within the cooldown
-# (default 10 min) only updates silently, so it never nags.
+# Every alert is logged to ~/.local/state/pc-watch/alerts.log, so thresholds
+# can be tuned from real data.
 #
-# Env: PC_WATCH_INTERVAL (5 s), PC_WATCH_COOLDOWN (600 s), and the PC_WATCH_*
-# thresholds read by gauge_verdict.
+# Env: PC_WATCH_INTERVAL (5), PC_WATCH_WARN_FOR (30), PC_WATCH_CRIT_FOR (15),
+#      PC_WATCH_COOLDOWN (1800) - all seconds.
 
 set -uo pipefail
 
 . "$HOME/.local/lib/pc/gauges.sh"
 
 INTERVAL="${PC_WATCH_INTERVAL:-5}"
-COOLDOWN="${PC_WATCH_COOLDOWN:-600}"
+WARN_FOR="${PC_WATCH_WARN_FOR:-30}"
+CRIT_FOR="${PC_WATCH_CRIT_FOR:-15}"
+COOLDOWN="${PC_WATCH_COOLDOWN:-1800}"
 ICON="$HOME/.local/share/icons/hicolor/scalable/apps/pc-watch.svg"
 [ -f "$ICON" ] || ICON=org.gnome.SystemMonitor
+LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/pc-watch"
+mkdir -p "$LOG_DIR"
 
-notify_id=0       # notification currently on screen, to replace in place
-episode=ok        # level of the current episode (ok|warn|crit)
-streak=0          # consecutive non-ok samples
-last_alert=0      # when the last audible notification went up
+warn_since=0      # when the current run of non-ok samples began
+crit_since=0      # when the current run of crit samples began
+last_alert=0      # when the last alert went up
+last_level=ok     # level of that alert
+escalated=false   # whether this cooldown window already spent its escalation
+waiter_pid=0      # background notify-send waiting for a button click
+notify_id=0
 
-# Open the dashboard in whatever terminal this desktop has.
-open_details() {
-    local term
-    for term in gnome-terminal kgx wezterm x-terminal-emulator; do
-        command -v "$term" > /dev/null || continue
-        case $term in
-            gnome-terminal) gnome-terminal --title "PC status" -- pc-status --watch ;;
-            wezterm) wezterm start -- pc-status --watch ;;
-            *) "$term" -e pc-status --watch ;;
-        esac
-        return
-    done
+# Open pc-fix in whatever terminal this desktop has.
+open_fix() {
+    if command -v gnome-terminal > /dev/null; then
+        gnome-terminal --title "PC fix" -- pc-fix
+    elif command -v kgx > /dev/null; then
+        kgx -e pc-fix
+    else
+        x-terminal-emulator -e pc-fix
+    fi
 }
 
-# notify <urgency> <title> <body> [transient]
-# Shows or replaces the notification. With action buttons notify-send blocks
-# until a click or dismissal, so it runs in the background; its first output
-# line is the id (kept for in-place replacement), the second the action. The
-# previous waiter is ended first: a replaced notification never reports back.
-waiter_pid=0
+# notify <urgency> <title> <body>
+# With action buttons notify-send blocks until a click or dismissal, so it runs
+# in the background; its first output line is the id (stdbuf: the pipe would
+# otherwise hold it back until the notification closes), the second the
+# clicked action. A replaced notification never reports back, so the previous
+# waiter is ended first.
 notify() {
-    local urgency=$1 title=$2 body=$3 transient=${4:-}
+    local urgency=$1 title=$2 body=$3 out i
     local args=(--app-name "PC watch" --icon "$ICON" --urgency "$urgency" --print-id)
     [ "$notify_id" -gt 0 ] && args+=(--replace-id "$notify_id")
     [ "$waiter_pid" -gt 0 ] && kill "$waiter_pid" 2>/dev/null
-    waiter_pid=0
-
-    if [ -n "$transient" ]; then
-        notify-send "${args[@]}" --transient --expire-time 4000 "$title" "$body" > /dev/null
-        notify_id=0
-        return
-    fi
-
-    local out i
     out=$(mktemp)
-    # stdbuf: notify-send's stdout is block-buffered into a file, which would
-    # hold the id back until the notification closes.
-    stdbuf -oL notify-send "${args[@]}" --action details="Details" --action pause="Pause background jobs" \
+    stdbuf -oL notify-send "${args[@]}" \
+        --action fix="Fix it" --action pause="Pause background jobs" \
         "$title" "$body" > "$out" &
     waiter_pid=$!
     for i in $(seq 20); do [ -s "$out" ] && break; sleep 0.1; done
     notify_id=$(head -1 "$out" 2>/dev/null)
     notify_id=${notify_id:-0}
-
     (
         while kill -0 "$waiter_pid" 2>/dev/null; do sleep 1; done
         case "$(sed -n 2p "$out")" in
-            details) open_details ;;
+            fix) open_fix ;;
             pause)
                 notify-send --app-name "PC watch" --icon "$ICON" --transient --expire-time 5000 \
                     "Background jobs paused" \
-                    "$(pc-freeze-guard --freeze). They resume by themselves once the machine is smooth again." ;;
+                    "$(pc-freeze-guard --freeze). They resume by themselves once the machine is smooth." ;;
         esac
         rm -f "$out"
     ) &
 }
 
-# Body text: why, then what is heaviest.
 describe() {
-    local apps mb name
-    apps=""
+    local apps="" mb name
     while read -r mb name; do
         apps+="${name} $(awk -v m="$mb" 'BEGIN {printf (m >= 1024 ? "%.1f GB" : "%d MB"), (m >= 1024 ? m / 1024 : m)}') · "
     done < <(top_memory 3)
-    printf '%s\n<b>Heaviest:</b> %s' "${GAUGE_REASONS^}" "${apps% · }"
+    printf '%s\n<b>Heaviest:</b> %s' "${LAG_REASONS^}" "${apps% · }"
+}
+
+alert() {
+    local level=$1 now=$2 title urgency
+    if [ "$level" = crit ]; then
+        title="Your PC is lagging"
+        urgency=critical
+    else
+        title="Your PC is getting heavy"
+        urgency=normal
+    fi
+    notify "$urgency" "$title" "$(describe)"
+    printf '%s %s %s | mem=%s%% swap=%s%% psi=%s/%s io=%s cpu=%s temp=%s\n' \
+        "$(date -Is)" "$level" "$LAG_REASONS" "$GAUGE_MEM_USED_PCT" "$GAUGE_SWAP_PCT" \
+        "$GAUGE_PSI_MEM" "$GAUGE_PSI_MEM_FULL" "$GAUGE_PSI_IO" "$GAUGE_PSI_CPU" "${GAUGE_TEMP_C:-?}" \
+        >> "$LOG_DIR/alerts.log"
+    last_alert=$now
+    last_level=$level
 }
 
 while true; do
     gauge_read
-    gauge_verdict
+    gauge_lag
+    # PC_WATCH_TEST=warn|crit forces a level, to try the alert end to end.
+    [ -n "${PC_WATCH_TEST:-}" ] && { LAG_LEVEL=$PC_WATCH_TEST; LAG_REASONS="test alert (PC_WATCH_TEST)"; }
+    now=$(date +%s)
 
-    if [ "$GAUGE_LEVEL" = ok ]; then
-        if [ "$episode" != ok ]; then
-            notify low "Back to normal" "Memory ${GAUGE_MEM_USED_PCT}% · no stalls." transient
-            episode=ok
-        fi
-        streak=0
-    else
-        streak=$((streak + 1))
-        # Two samples in a row, so one spike never raises an alert.
-        if [ "$streak" -ge 2 ] && [ "$GAUGE_LEVEL" != "$episode" ]; then
-            now=$(date +%s)
-            if [ "$GAUGE_LEVEL" = crit ]; then
-                title="Your PC is lagging"
-                urgency=critical
-            else
-                title="Your PC is getting heavy"
-                urgency=normal
-            fi
-            # Inside the cooldown, only escalations (warn -> crit) make noise.
-            if [ $((now - last_alert)) -ge "$COOLDOWN" ] || [ "$GAUGE_LEVEL" = crit ]; then
-                notify "$urgency" "$title" "$(describe)"
-                last_alert=$now
-            fi
-            episode=$GAUGE_LEVEL
+    case $LAG_LEVEL in
+        ok) warn_since=0; crit_since=0 ;;
+        warn) [ "$warn_since" -eq 0 ] && warn_since=$now; crit_since=0 ;;
+        crit) [ "$warn_since" -eq 0 ] && warn_since=$now; [ "$crit_since" -eq 0 ] && crit_since=$now ;;
+    esac
+
+    due=""
+    if [ "$crit_since" -gt 0 ] && [ $((now - crit_since)) -ge "$CRIT_FOR" ]; then
+        due=crit
+    elif [ "$warn_since" -gt 0 ] && [ $((now - warn_since)) -ge "$WARN_FOR" ]; then
+        due=warn
+    fi
+
+    if [ -n "$due" ]; then
+        if [ $((now - last_alert)) -ge "$COOLDOWN" ]; then
+            alert "$due" "$now"
+            escalated=false
+        elif [ "$due" = crit ] && [ "$last_level" = warn ] && [ "$escalated" = false ]; then
+            alert crit "$now"
+            escalated=true
         fi
     fi
     sleep "$INTERVAL"

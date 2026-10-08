@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=PC Fix
+Comment=See what is making the computer slow, and stop it
+Exec=pc-fix
+Terminal=true
+Icon=pc-watch
+Categories=System;Monitor;
+Keywords=slow;lag;memory;cpu;task;kill;process;

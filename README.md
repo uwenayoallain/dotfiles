@@ -84,14 +84,14 @@ Everything else is a stow package whose directory mirrors its target path:
 | `bashrc` | `$HOME` | `.bashrc`, `.bash_profile`, `.profile`, `.inputrc`, `.tmux.conf` |
 | `gitconfig` | `$HOME` | `.gitconfig` |
 | `ssh` | `$HOME` | `.ssh/config` |
-| `localbin` | `$HOME` | `.local/bin`: `pc-watch`, `pc-status`, `pc-freeze-guard`, `pc-background-gate`, `fix-pc-sleep`; `.local/lib/pc` shared gauges |
+| `localbin` | `$HOME` | `.local/bin`: `pc-watch`, `pc-fix`, `pc-status`, `pc-freeze-guard`, `pc-background-gate`, `fix-pc-sleep`; `.local/lib/pc` shared gauges |
 | `agents` | `$HOME` | Claude and Gemini config files |
 | `skills` | `$HOME` | `.agents/skills` — the shared skill store |
 | `nvim` `tmux` `starship` `wezterm` | `$HOME/.config` | editor, multiplexer, prompt, terminal |
 | `vscode` | `$HOME/.config` | `Code/User` settings, keybindings, snippets, MCP |
 | `opencode` | `$HOME/.config` | `opencode.jsonc` |
 | `systemd` | `$HOME/.config` | `background.slice`, the freeze-guard timer, `pc-watch.service` |
-| `applications` | `$HOME/.local/share` | `.desktop` overrides, the pc-watch icon |
+| `applications` | `$HOME/.local/share` | the PC Fix launcher, the pc-watch icon |
 
 ## Resource tuning
 
@@ -115,14 +115,15 @@ A user unit joins the batch pool with `Slice=background.slice`.
 
 | Command | What it does |
 | --- | --- |
-| `pc-watch` (service) | Reads pressure stalls, memory, swap and temperature every 5 s. When the machine is *about* to lag it pops a notification naming the cause and the heaviest apps, with **Details** and **Pause background jobs** buttons. One per episode, updated in place, then a short "back to normal". |
+| `pc-watch` (service) | Alerts only when you would feel it: apps waiting on memory or disk, a saturated CPU, memory about to run out, or a throttling CPU, held for 30 s (15 s if severe). At most one alert per 30 min, no "back to normal" popup. Buttons: **Fix it** and **Pause background jobs**. Alerts are logged to `~/.local/state/pc-watch/alerts.log`. |
+| `pc-fix` (also "PC Fix" in the app grid) | Lists the heavy hitters (apps grouped as systemd groups them, services, Docker containers, background jobs); tick what to stop and it reports the memory freed. Apps get a normal close first; the desktop, audio and terminals are never offered. |
 | `pc-status [--watch]` | One screen: smooth / getting heavy / lagging and why, usage bars, slice limits, heaviest apps, recent guard actions. |
 | `pc-freeze-guard` (every minute) | On high swap, restarts idle desktop utilities sitting on swap. Lagging for 2 minutes: freezes every unit in `background.slice`; 5 minutes: stops them. Thaws when smooth. `--freeze` / `--thaw` by hand. |
 | `pc-background-gate <cmd>` | Starts a command only after the desktop has been idle for a while and stops it when you return. |
 
-All of them share one rule (`~/.local/lib/pc/gauges.sh`): pressure-stall time
-first, because that is what lag is; fill levels second; swap only counts while
-RAM is also tight. Every threshold is a percentage.
+All of them share one rule (`gauge_lag` in `~/.local/lib/pc/gauges.sh`): time
+actually spent waiting, because that is what lag is. Memory full of cache or
+stale swap alone never counts. Every threshold is a percentage.
 
 ### Re-running is cheap
 

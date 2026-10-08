@@ -39,13 +39,13 @@ row() { printf '  %s%-11s%s %s  %s\n' "$CK_C_MUTED" "$1" "$CK_RESET" "$2" "$3"; 
 
 render() {
     gauge_read
-    gauge_verdict
+    gauge_lag
 
     local verdict
-    case $GAUGE_LEVEL in
+    case $LAG_LEVEL in
         ok) verdict="${CK_C_OK}${CK_BOLD}● Smooth${CK_RESET}" ;;
-        warn) verdict="${CK_C_WARN}${CK_BOLD}● Getting heavy${CK_RESET}  $GAUGE_REASONS" ;;
-        crit) verdict="${CK_C_ERR}${CK_BOLD}● Lagging${CK_RESET}  $GAUGE_REASONS" ;;
+        warn) verdict="${CK_C_WARN}${CK_BOLD}● Getting heavy${CK_RESET}  $LAG_REASONS  ·  run pc-fix" ;;
+        crit) verdict="${CK_C_ERR}${CK_BOLD}● Lagging${CK_RESET}  $LAG_REASONS  ·  run pc-fix" ;;
     esac
 
     ui_banner "PC status" "$(hostname) · $CPUS CPUs · $(gb "$GAUGE_MEM_TOTAL_MB") RAM · $(date +%H:%M:%S)"

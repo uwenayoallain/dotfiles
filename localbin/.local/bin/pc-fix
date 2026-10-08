@@ -1,0 +1,177 @@
+#!/usr/bin/env bash
+# Find what is making the machine heavy, and stop it.
+#
+#   pc-fix          interactive: heavy hitters, tick what to stop, see what it freed
+#
+# Opened by the pc-watch notification ("Fix it") and by the "PC fix" launcher.
+# Lists the heaviest apps (all processes of an app summed together), Docker
+# containers and running background jobs, then stops whatever you pick:
+#
+#   apps                SIGTERM to every process of the app (a normal close;
+#                       browsers offer to restore tabs), SIGKILL after 5 s only
+#                       for processes that ignored it
+#   launched apps and   systemctl --user stop on the app's own scope or the
+#   services            service, so the whole group goes and services stay stopped
+#   containers          docker stop
+#   background jobs     frozen (thawed automatically once the machine is smooth)
+#
+# The desktop, audio, terminals and shells are never offered.
+
+set -uo pipefail
+
+. "$HOME/.local/lib/pc/gauges.sh"
+for ck in "${CK_DIR:-}" "$HOME/projects/personal/cli-kit" "$HOME/.local/share/cli-kit" "$HOME/dotfiles/cli-kit"; do
+    [ -n "$ck" ] && [ -f "$ck/ui.sh" ] && { CK_DIR=$ck; . "$ck/ui.sh"; break; }
+done
+if ! declare -F ui_pick > /dev/null; then
+    echo "pc-fix needs cli-kit (gum UI). Install it with the dotfiles installer." >&2
+    exit 1
+fi
+
+gb() { awk -v m="$1" 'BEGIN {printf (m >= 1024 ? "%.1f GB" : "%d MB"), (m >= 1024 ? m / 1024 : m)}'; }
+
+banner() {
+    gauge_read
+    gauge_lag
+    local verdict="smooth"
+    [ "$LAG_LEVEL" = warn ] && verdict="getting heavy: $LAG_REASONS"
+    [ "$LAG_LEVEL" = crit ] && verdict="lagging: $LAG_REASONS"
+    ui_banner "PC fix" "$(hostname) · $verdict" \
+        "Memory" "${GAUGE_MEM_USED_PCT}% used · $(gb "$GAUGE_MEM_AVAIL_MB") free" \
+        "Swap" "${GAUGE_SWAP_PCT}% · $(gb "$GAUGE_SWAP_USED_MB") used" \
+        "Stalls" "memory ${GAUGE_PSI_MEM}% · disk ${GAUGE_PSI_IO}% · cpu ${GAUGE_PSI_CPU}%${GAUGE_TEMP_C:+ · ${GAUGE_TEMP_C}°C}"
+}
+
+# Fill ITEMS (tags), ITEM_LABEL, ITEM_KIND, ITEM_TARGET.
+declare -a ITEMS
+declare -A ITEM_LABEL ITEM_KIND ITEM_TARGET ITEM_NAME
+collect() {
+    ITEMS=()
+    ITEM_LABEL=() ITEM_KIND=() ITEM_TARGET=() ITEM_NAME=()
+    local mb cpu procs name tag unit i=0
+
+    local kind target
+    while IFS=$'\t' read -r mb cpu procs kind target name; do
+        [ -n "$name" ] || continue
+        [ "$mb" -ge 50 ] || [ "$cpu" -ge 20 ] || continue
+        i=$((i + 1))
+        tag="app$i"
+        ITEMS+=("$tag")
+        ITEM_NAME[$tag]=$name
+        ITEM_TARGET[$tag]=$target
+        if [ "$kind" = unit ]; then ITEM_KIND[$tag]=unit; else ITEM_KIND[$tag]=app; fi
+        ITEM_LABEL[$tag]=$(printf '%8s  %4s%% cpu  %s%s' "$(gb "$mb")" "$cpu" "$name" \
+            "$([ "$procs" -gt 1 ] && echo " · $procs processes")")
+    done < <(heavy_apps 12)
+
+    if command -v docker > /dev/null && docker ps -q 2>/dev/null | grep -q .; then
+        local cname cmb ccpu
+        # docker prints "262.2MiB / 2GiB" and "0.08%": normalise to MB and whole %.
+        while IFS='|' read -r cname cmb ccpu; do
+            [ "$cmb" -ge 50 ] || [ "$ccpu" -ge 20 ] || continue
+            tag="ctr:$cname"
+            ITEMS+=("$tag")
+            ITEM_KIND[$tag]=container
+            ITEM_TARGET[$tag]=$cname
+            ITEM_NAME[$tag]=$cname
+            ITEM_LABEL[$tag]=$(printf '%8s  %4s%% cpu  %s (container)' "$(gb "$cmb")" "$ccpu" "$cname")
+        done < <(docker stats --no-stream --format '{{.Name}}|{{.MemUsage}}|{{.CPUPerc}}' 2>/dev/null \
+                 | awk -F'|' '{
+                       split($2, u, " "); v = u[1] + 0
+                       if (u[1] ~ /GiB|GB/) v *= 1024; else if (u[1] ~ /KiB|kB/) v /= 1024
+                       printf "%s|%d|%d\n", $1, v, $3 + 0 }' | sort -t'|' -k2 -rn 2>/dev/null)
+    fi
+
+    local slice="/sys/fs/cgroup/user.slice/user-$UID.slice/user@$UID.service/background.slice" dir
+    for dir in "$slice"/*.service; do
+        [ -d "$dir" ] || continue
+        read -r _ < "$dir/cgroup.procs" 2>/dev/null || continue
+        unit=$(basename "$dir")
+        mb=$(( $(cat "$dir/memory.current" 2>/dev/null || echo 0) / 1048576 ))
+        tag="bg:$unit"
+        ITEMS+=("$tag")
+        ITEM_KIND[$tag]=background
+        ITEM_TARGET[$tag]=$unit
+        ITEM_NAME[$tag]=${unit%.service}
+        ITEM_LABEL[$tag]=$(printf '%8s  %4s  %s (background job)' "$(gb "$mb")" "" "${unit%.service}")
+    done
+}
+
+stop_app() {
+    local pids=$1 label=$2 pid alive=()
+    IFS=',' read -ra list <<< "$pids"
+    for pid in "${list[@]}"; do kill -TERM "$pid" 2>/dev/null; done
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+        alive=()
+        for pid in "${list[@]}"; do kill -0 "$pid" 2>/dev/null && alive+=("$pid"); done
+        [ ${#alive[@]} -eq 0 ] && break
+        sleep 0.5
+    done
+    if [ ${#alive[@]} -gt 0 ]; then
+        for pid in "${alive[@]}"; do kill -KILL "$pid" 2>/dev/null; done
+        ui_warn "$label: ${#alive[@]} process(es) ignored the close request and were force-killed"
+    fi
+}
+
+act() {
+    local tag=$1 kind target
+    kind=${ITEM_KIND[$tag]}
+    target=${ITEM_TARGET[$tag]}
+    case $kind in
+        # Not behind ui_spin: that runs its command in a fresh shell, where
+        # this script's functions do not exist.
+        app)
+            ui_info "Closing ${ITEM_NAME[$tag]}..."
+            stop_app "$target" "${ITEM_NAME[$tag]}"
+            ui_ok "Closed ${ITEM_NAME[$tag]}"
+            ;;
+        # A launched app's scopes, or a user service: systemd stops the whole
+        # group (and a service then stays stopped instead of restarting).
+        unit) ui_spin "Stopping ${ITEM_NAME[$tag]}" systemctl --user stop ${target//,/ } ;;
+        container) ui_spin "Stopping container $target" docker stop "$target" ;;
+        background) ui_spin "Pausing background job $target" systemctl --user freeze "$target" \
+                        && echo "$target" >> "${XDG_RUNTIME_DIR:-/tmp}/pc-freeze-guard/frozen" ;;
+    esac
+}
+
+while true; do
+    clear
+    banner
+    ui_step "Heavy hitters"
+    collect
+    if [ ${#ITEMS[@]} -eq 0 ]; then
+        ui_ok "Nothing heavy is running."
+        ui_confirm "Check again?" no || exit 0
+        continue
+    fi
+
+    # Offer the labels themselves, so the list shows no internal tags.
+    args=()
+    declare -A BY_LABEL=()
+    for tag in "${ITEMS[@]}"; do
+        args+=("${ITEM_LABEL[$tag]}" "" off)
+        BY_LABEL["${ITEM_LABEL[$tag]}"]=$tag
+    done
+    chosen=()
+    ui_pick "Stop which? Esc to leave." chosen "${args[@]}" || exit 0
+    picked=()
+    for l in "${chosen[@]}"; do picked+=("${BY_LABEL[$l]}"); done
+    if [ ${#picked[@]} -eq 0 ]; then
+        ui_confirm "Nothing ticked. Refresh the list?" yes || exit 0
+        continue
+    fi
+
+    before=$GAUGE_MEM_AVAIL_MB
+    ui_step "Stopping ${#picked[@]} item(s)"
+    for tag in "${picked[@]}"; do act "$tag"; done
+    sleep 1
+    gauge_read
+    freed=$(( GAUGE_MEM_AVAIL_MB - before ))
+    if [ "$freed" -gt 0 ]; then
+        ui_ok "Freed $(gb "$freed") of memory · now $(gb "$GAUGE_MEM_AVAIL_MB") free"
+    else
+        ui_info "Memory now $(gb "$GAUGE_MEM_AVAIL_MB") free"
+    fi
+    echo
+    ui_confirm "Look again?" no || exit 0
+done

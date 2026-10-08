@@ -72,7 +72,7 @@ package_temp() {
 # Fold the helper processes of multi-process apps into one readable name.
 AWK_APP_NAME='
 function app_name(n) {
-    if (n ~ /^(Isolated Web Co|Web Content|WebExtensions|Privileged Cont|RDD Process|Socket Process|Utility Process|GeckoMain)/) return "firefox/zen tabs"
+    if (n ~ /^(zen|firefox|Isolated Web Co|Web Content|WebExtensions|Privileged Cont|RDD Process|Socket Process|Utility Process|GeckoMain|forkserver)/) return "zen/firefox"
     if (n ~ /^(chrome|chrome_crashpad|chrome-sandbox)/) return "chrome"
     if (n ~ /^(code|code-insiders)$/) return "vscode"
     return n
@@ -86,7 +86,7 @@ top_memory() {
         { rss = $1; sub(/^ *[0-9]+ +/, ""); m[app_name($0)] += rss }
         END { for (k in m) printf "%d %s\n", m[k] / 1024, k }
         '"$AWK_APP_NAME" \
-        | sort -rn | head -n "${1:-3}"
+        | sort -rn 2>/dev/null | head -n "${1:-3}"
 }
 
 # top_cpu [n]: "<percent> <app>" over the last half second.
@@ -96,7 +96,7 @@ top_cpu() {
                pass == 2 && $1 ~ /^[0-9]+$/ {cpu = $9; for (i = 1; i < 12; i++) $i = ""; sub(/^ +/, ""); c[app_name($0)] += cpu}
                END {for (k in c) if (c[k] >= 1) printf "%d %s\n", c[k], k}
                '"$AWK_APP_NAME" \
-        | sort -rn | head -n "${1:-3}"
+        | sort -rn 2>/dev/null | head -n "${1:-3}"
 }
 
 # slice_usage <unit> [--user]: "<current MB> <max MB|∞>" for a systemd slice.
@@ -109,44 +109,77 @@ slice_usage() {
     echo "$((cur / 1048576)) $max"
 }
 
-# gauge_verdict: after gauge_read, sets GAUGE_LEVEL (ok|warn|crit) and
-# GAUGE_REASONS (human-readable, "; "-separated).
-#
-# Pressure-stall (PSI) is the primary signal: it measures time tasks actually
-# spent waiting, which is what lag *is*. Fill levels are secondary, and high
-# swap alone is not lag (stale pages from a long uptime sit there harmlessly),
-# so swap only counts while RAM is also tight. All thresholds are percentages,
-# so they mean the same on any machine. Override with PC_WATCH_* variables.
-gauge_verdict() {
+# gauge_lag: after gauge_read, sets LAG_LEVEL (ok|warn|crit) and LAG_REASONS,
+# counting only what a person at the keyboard actually feels: time tasks spent
+# *waiting* (pressure stalls), a CPU so saturated that tasks queue, memory about
+# to run out, and the CPU hot enough to throttle. Fill levels on their own
+# (RAM 90% full of cache, stale swap) are not lag and never alert.
+gauge_lag() {
     local warn=() crit=()
-    local mem_w=${PC_WATCH_MEM_WARN:-88} mem_c=${PC_WATCH_MEM_CRIT:-95}
-    local psi_w=${PC_WATCH_PSI_WARN:-10} psi_c=${PC_WATCH_PSI_CRIT:-25}
-    local io_w=${PC_WATCH_IO_WARN:-25} io_c=${PC_WATCH_IO_CRIT:-50}
-    local cpu_w=${PC_WATCH_CPU_WARN:-60}
-    local temp_w=${PC_WATCH_TEMP_WARN:-93} temp_c=${PC_WATCH_TEMP_CRIT:-98}
-
-    [ "$GAUGE_MEM_USED_PCT" -ge "$mem_c" ] && crit+=("memory ${GAUGE_MEM_USED_PCT}% full")
-    [ "$GAUGE_MEM_USED_PCT" -ge "$mem_w" ] && [ "$GAUGE_MEM_USED_PCT" -lt "$mem_c" ] && warn+=("memory ${GAUGE_MEM_USED_PCT}% full")
-    [ "$GAUGE_SWAP_PCT" -ge 90 ] && [ "$GAUGE_MEM_USED_PCT" -ge 80 ] && crit+=("swap ${GAUGE_SWAP_PCT}% full")
-    [ "$GAUGE_SWAP_PCT" -ge 75 ] && [ "$GAUGE_SWAP_PCT" -lt 90 ] && [ "$GAUGE_MEM_USED_PCT" -ge 80 ] && warn+=("swap ${GAUGE_SWAP_PCT}% full")
-    [ "$GAUGE_PSI_MEM" -ge "$psi_c" ] || [ "$GAUGE_PSI_MEM_FULL" -ge 10 ] && crit+=("waiting on memory ${GAUGE_PSI_MEM}% of the time")
-    [ "$GAUGE_PSI_MEM" -ge "$psi_w" ] && [ "$GAUGE_PSI_MEM" -lt "$psi_c" ] && [ "$GAUGE_PSI_MEM_FULL" -lt 10 ] && warn+=("waiting on memory ${GAUGE_PSI_MEM}% of the time")
-    [ "$GAUGE_PSI_IO" -ge "$io_c" ] && crit+=("disk stalls ${GAUGE_PSI_IO}% of the time")
-    [ "$GAUGE_PSI_IO" -ge "$io_w" ] && [ "$GAUGE_PSI_IO" -lt "$io_c" ] && warn+=("disk stalls ${GAUGE_PSI_IO}% of the time")
-    [ "$GAUGE_PSI_CPU" -ge "$cpu_w" ] && warn+=("CPU queue: tasks waiting ${GAUGE_PSI_CPU}% of the time")
-    if [ -n "$GAUGE_TEMP_C" ]; then
-        [ "$GAUGE_TEMP_C" -ge "$temp_c" ] && crit+=("CPU at ${GAUGE_TEMP_C}°C, throttling")
-        [ "$GAUGE_TEMP_C" -ge "$temp_w" ] && [ "$GAUGE_TEMP_C" -lt "$temp_c" ] && warn+=("CPU at ${GAUGE_TEMP_C}°C")
-    fi
-
-    if [ ${#crit[@]} -gt 0 ]; then
-        GAUGE_LEVEL=crit
-    elif [ ${#warn[@]} -gt 0 ]; then
-        GAUGE_LEVEL=warn
-    else
-        GAUGE_LEVEL=ok
-    fi
+    [ "$GAUGE_PSI_MEM_FULL" -ge 10 ] && crit+=("everything is waiting on memory")
+    [ "$GAUGE_PSI_MEM" -ge 30 ] && crit+=("apps wait on memory ${GAUGE_PSI_MEM}% of the time")
+    [ "$GAUGE_PSI_MEM" -ge 15 ] && [ "$GAUGE_PSI_MEM" -lt 30 ] && warn+=("apps wait on memory ${GAUGE_PSI_MEM}% of the time")
+    [ "$GAUGE_MEM_USED_PCT" -ge 97 ] && crit+=("memory almost exhausted (${GAUGE_MEM_USED_PCT}%)")
+    [ "$GAUGE_PSI_IO" -ge 40 ] && crit+=("disk stalls ${GAUGE_PSI_IO}% of the time")
+    [ "$GAUGE_PSI_IO" -ge 25 ] && [ "$GAUGE_PSI_IO" -lt 40 ] && warn+=("disk stalls ${GAUGE_PSI_IO}% of the time")
+    [ "$GAUGE_PSI_CPU" -ge 80 ] && warn+=("CPU saturated: tasks queue ${GAUGE_PSI_CPU}% of the time")
+    [ -n "$GAUGE_TEMP_C" ] && [ "$GAUGE_TEMP_C" -ge 97 ] && warn+=("CPU throttling at ${GAUGE_TEMP_C}°C")
+    if [ ${#crit[@]} -gt 0 ]; then LAG_LEVEL=crit
+    elif [ ${#warn[@]} -gt 0 ]; then LAG_LEVEL=warn
+    else LAG_LEVEL=ok; fi
     local all=("${crit[@]}" "${warn[@]}")
-    GAUGE_REASONS=$(IFS=';'; echo "${all[*]}" | sed 's/;/; /g')
+    LAG_REASONS=$(IFS=';'; echo "${all[*]}" | sed 's/;/; /g')
     return 0
+}
+
+# Processes pc-fix never offers to stop: the desktop session, audio, input,
+# terminals and shells (stopping those would take pc-fix itself down).
+PROTECTED_RE='^(gnome-shell|gnome-session|Xwayland|Xorg|systemd|dbus|pipewire|wireplumber|gdm|gsd-|ibus|at-spi|xdg-|gvfs|evolution-|tracker-|goa-|gjs|mutter|gnome-keyring|dconf|gnome-terminal|kgx|ptyxis|wezterm|bash|sh|zsh|fish|tmux|sudo|ssh|gpg-agent|pc-fix|gum|top|ps|sort|awk|sleep|notify-send|snapd-desktop|xdg-desktop|evolution-alarm|nautilus)'
+
+# Session services that are never stopped, even when an app runs inside them
+# (D-Bus activates some apps inside dbus.service; stopping that would end the
+# desktop session). Apps found inside them are offered per process instead.
+CORE_UNIT_RE='^(dbus|dbus-broker|pipewire|pipewire-pulse|wireplumber|filter-chain|gnome-|org\.gnome\.|xdg-|at-spi|evolution-|tracker-|gvfs|ibus|dconf|gcr-|snapd|snap\.snapd|init|session|appimagelauncherd|pc-watch|pc-freeze-guard)'
+
+# heavy_apps [n]: the n heaviest things this user runs, grouped the way
+# systemd already groups them, one per line:
+#   <MB>\t<cpu%>\t<processes>\t<kind>\t<target>\t<name>
+#   kind=unit  target=<unit,unit,...>     (a launched app's scopes, or a service)
+#   kind=pids  target=<pid,pid,...>       (commands in a terminal, or apps
+#                                          living inside a core session unit)
+# Memory is summed RSS; CPU is measured over the last half second.
+heavy_apps() {
+    local cpu_file
+    cpu_file=$(mktemp)
+    top -b -n 2 -d 0.5 -w 200 -u "$UID" 2>/dev/null \
+        | awk '/^top -/ {pass++} pass == 2 && $1 ~ /^[0-9]+$/ {print $1, $9}' > "$cpu_file"
+    ps -u "$UID" -o pid=,rss=,comm= | awk -v cpuf="$cpu_file" -v protect="$PROTECTED_RE" -v core="$CORE_UNIT_RE" '
+        BEGIN { while ((getline line < cpuf) > 0) { split(line, a, " "); cpu[a[1]] = a[2] } }
+        {
+            pid = $1; rss = $2
+            sub(/^ *[0-9]+ +[0-9]+ +/, ""); comm = $0
+            if (comm ~ protect || rss == 0) next
+            cg = ""; f = "/proc/" pid "/cgroup"
+            if ((getline cg < f) > 0) close(f); else next
+            n = split(cg, parts, "/"); unit = parts[n]
+            if (unit ~ /^docker-/) next     # containers are listed via docker itself
+            if (unit ~ /^vte-spawn-|^tmux-spawn-/ || unit !~ /\.(scope|service)$/ || unit ~ core) {
+                # A terminal tab or a core unit: one row per command, per tab.
+                name = app_name(comm); key = "pids:" unit ":" name; kind = "pids"; tgt = pid
+            } else if (unit ~ /^app-/) {
+                # app-gnome-org.gnome.Nautilus-1234.scope -> Nautilus; an app
+                # spread over several scopes becomes one row stopping them all.
+                name = unit; sub(/^app-(gnome|flatpak|snap)?-?/, "", name); sub(/-[0-9]+\.scope$/, "", name)
+                sub(/\.(scope|service)$/, "", name); gsub(/\\x2d/, "-", name); sub(/@.*$/, "", name); sub(/^.*\./, "", name)
+                key = "app:" name; kind = "unit"; tgt = unit
+            } else {
+                name = unit; sub(/\.service$/, "", name); sub(/^snap\./, "", name); sub(/\..*$/, "", name)
+                name = name " (service)"; key = "svc:" unit; kind = "unit"; tgt = unit
+            }
+            m[key] += rss; c[key] += cpu[pid]; k[key]++; K[key] = kind; N[key] = name
+            if (index("," t[key] ",", "," tgt ",") == 0) t[key] = t[key] (t[key] == "" ? "" : ",") tgt
+        }
+        END { for (x in m) printf "%d\t%d\t%d\t%s\t%s\t%s\n", m[x] / 1024, c[x], k[x], K[x], t[x], N[x] }
+        '"$AWK_APP_NAME" | sort -t$'\t' -k1,1nr 2>/dev/null | head -n "${1:-10}"
+    rm -f "$cpu_file"
 }
